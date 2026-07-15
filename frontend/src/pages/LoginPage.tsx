@@ -4,12 +4,11 @@ import { ApiError, apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { User } from '../types';
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
 export function LoginPage() {
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const { user, loading, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
