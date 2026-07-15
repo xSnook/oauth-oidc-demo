@@ -50,7 +50,7 @@ export function LoginPage() {
       window.google.accounts.id.renderButton(googleButtonRef.current, {
         theme: 'outline',
         size: 'large',
-        width: 320,
+        width: 440,
         text: 'signin_with',
       });
     }, 100);

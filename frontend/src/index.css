@@ -202,10 +202,17 @@ p {
   display: grid;
   gap: 12px;
   margin-top: 22px;
+  max-width: 440px;
 }
 
 .google-button {
   min-height: 42px;
+  width: 100%;
+}
+
+.google-button > div,
+.google-button iframe {
+  width: 100% !important;
 }
 
 .banner {

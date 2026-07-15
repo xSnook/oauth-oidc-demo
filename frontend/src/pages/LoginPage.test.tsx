@@ -111,7 +111,7 @@ describe('LoginPage', () => {
     expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
       theme: 'outline',
       size: 'large',
-      width: 320,
+      width: 440,
       text: 'signin_with',
     });
     expect(screen.getByLabelText('Google sign-in loaded')).toBeInTheDocument();
