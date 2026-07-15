@@ -1,0 +1,208 @@
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: appdb
+          MYSQL_USER: appuser
+          MYSQL_PASSWORD: apppass
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -proot --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_ENV: local
+      DATABASE_URL: mysql+pymysql://appuser:apppass@127.0.0.1:3306/appdb?charset=utf8mb4
+      SESSION_JWT_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+      GOOGLE_CLIENT_ID: ci-dummy
+      AZURE_CLIENT_ID: ci-dummy
+      COOKIE_SECURE: "false"
+      DB_REQUIRE_TLS: "false"
+      ADMIN_EMAILS: admin@example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Lint backend
+        working-directory: backend
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Migration smoke test
+        working-directory: backend
+        run: |
+          test "$(alembic heads | wc -l)" -eq 1
+          alembic upgrade head
+
+      - name: Test backend
+        working-directory: backend
+        run: python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm run test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  build-push:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push app-api
+        run: |
+          REG=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          docker build --target prod \
+            -t "$REG/app-api:${{ github.sha }}" \
+            -t "$REG/app-api:latest" \
+            backend
+          docker push --all-tags "$REG/app-api"
+
+      - name: Build and push app-web
+        run: |
+          REG=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          docker build --target prod \
+            --build-arg VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }} \
+            --build-arg VITE_AZURE_CLIENT_ID=${{ vars.VITE_AZURE_CLIENT_ID }} \
+            -t "$REG/app-web:${{ github.sha }}" \
+            -t "$REG/app-web:latest" \
+            frontend
+          docker push --all-tags "$REG/app-web"
+
+  deploy:
+    needs: build-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Open SSH from this runner only
+        run: |
+          RUNNER_IP=$(curl -fsS https://checkip.amazonaws.com)
+          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr "$RUNNER_IP/32"
+
+      - name: Sync deploy files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "deploy/*"
+          target: /opt/app/
+          strip_components: 1
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          envs: GIT_SHA
+          script: |
+            set -euo pipefail
+            cd /opt/app
+            chmod +x fetch-env.sh
+
+            aws ecr get-login-password --region us-east-1 \
+              | docker login --username AWS --password-stdin \
+                "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
+
+            ./fetch-env.sh
+
+            RUNNING=$(docker inspect --format '{{.Config.Image}}' \
+              $(docker compose -f docker-compose.prod.yml ps -q api) 2>/dev/null | cut -d: -f2 || true)
+            [ -n "$RUNNING" ] && echo "$RUNNING" > .previous_tag
+
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${GIT_SHA}/" .env
+            docker compose -f docker-compose.prod.yml pull
+
+            docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+            docker compose -f docker-compose.prod.yml up -d
+
+            for i in $(seq 1 30); do
+              curl -fsS http://localhost/api/health && break
+              sleep 2
+              [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
+            done
+
+            docker image prune -af --filter "until=72h"
+        env:
+          GIT_SHA: ${{ github.sha }}
+
+      - name: Close SSH
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr "$RUNNER_IP/32" || true
