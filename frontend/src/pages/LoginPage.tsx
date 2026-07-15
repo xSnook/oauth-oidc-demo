@@ -47,10 +47,11 @@ export function LoginPage() {
           }
         },
       });
+      const buttonWidth = googleButtonRef.current.clientWidth || 380;
       window.google.accounts.id.renderButton(googleButtonRef.current, {
         theme: 'outline',
         size: 'large',
-        width: 440,
+        width: buttonWidth,
         text: 'signin_with',
       });
     }, 100);
