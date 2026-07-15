@@ -7,14 +7,22 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-os.environ["APP_ENV"] = "local"
-os.environ["DATABASE_URL"] = (
-    "mysql+pymysql://appuser:apppass@mysql:3306/appdb?charset=utf8mb4"
+
+def set_test_env_default(name: str, value: str) -> None:
+    if not os.environ.get(name):
+        os.environ[name] = value
+
+
+set_test_env_default("APP_ENV", "local")
+set_test_env_default(
+    "DATABASE_URL", "mysql+pymysql://appuser:apppass@mysql:3306/appdb?charset=utf8mb4"
 )
-os.environ["SESSION_JWT_SECRET"] = "test-only-secret-0123456789abcdef0123456789abcdef"
-os.environ["COOKIE_SECURE"] = "false"
-os.environ["GOOGLE_CLIENT_ID"] = "test-google-client"
-os.environ["AZURE_CLIENT_ID"] = ""
+set_test_env_default(
+    "SESSION_JWT_SECRET", "test-only-secret-0123456789abcdef0123456789abcdef"
+)
+set_test_env_default("COOKIE_SECURE", "false")
+set_test_env_default("GOOGLE_CLIENT_ID", "test-google-client")
+set_test_env_default("AZURE_CLIENT_ID", "")
 os.environ["ADMIN_EMAILS"] = "admin@example.com"
 
 from app.db import get_db  # noqa: E402
