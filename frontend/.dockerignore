@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+src/**/*.test.ts
+src/**/*.test.tsx
+src/test/
 .env
 .env.*
 !.env.example
