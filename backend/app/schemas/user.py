@@ -24,3 +24,16 @@ class UserOut(BaseModel):
         if value is None:
             return None
         return value.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z")
+
+
+class UserListOut(BaseModel):
+    items: list[UserOut]
+    total: int
+
+
+class RoleUpdateRequest(BaseModel):
+    role: Role
+
+
+class StatusUpdateRequest(BaseModel):
+    is_active: bool

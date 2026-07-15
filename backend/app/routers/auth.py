@@ -12,6 +12,7 @@ from app.errors import app_error
 from app.models import User
 from app.schemas.auth import TokenLoginRequest
 from app.schemas.user import UserOut
+from app.serializers import user_out
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -24,19 +25,6 @@ def require_json(request: Request) -> None:
             "UNSUPPORTED_MEDIA_TYPE",
             "Content-Type must be application/json",
         )
-
-
-def user_out(user: User) -> UserOut:
-    return UserOut(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        role=user.role,
-        is_active=user.is_active,
-        auth_providers=[identity.provider for identity in user.identities],
-        created_at=user.created_at,
-        last_login_at=user.last_login_at,
-    )
 
 
 @router.post("/google", response_model=UserOut, dependencies=[Depends(require_json)])

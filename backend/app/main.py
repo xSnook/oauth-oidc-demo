@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.errors import error_detail
-from app.routers import auth, health
+from app.routers import auth, dashboard, health, users
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(users.router)
+    app.include_router(dashboard.router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
