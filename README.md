@@ -1,17 +1,23 @@
 # OAuth OIDC Demo
 
-Internal OAuth/OIDC demo app planned as a FastAPI, React, and MySQL monorepo.
+Internal OAuth/OIDC demo app built as a FastAPI, React, and MySQL monorepo.
 
-This repository is currently at milestone M0 from `PLAN.md`: the repo shell, project docs,
-root `.gitignore`, and example environment file are in place. The next milestone is M1:
-Docker Compose, FastAPI skeleton, SQLAlchemy models, Alembic initial migration, and
-`/api/health`.
+The project has progressed through local auth, RBAC, frontend flows, production image
+builds, and PR CI. Current milestone work is M7: AWS provisioning, DNS, TLS, and first
+production deploy.
 
 ## Local Setup
 
 Human setup and local environment steps are documented in `SETUP.md`. In short, copy
 `.env.example` to `.env`, fill in the client IDs and `SESSION_JWT_SECRET`, then use Docker
-Compose once the application milestone files are implemented.
+Compose for local development.
+
+M7 production setup helpers live in `infra/m7/`:
+
+- `infra/m7/README.md` documents the AWS/domain/GitHub runbook.
+- `infra/m7/preflight.ps1` checks local tooling and required config.
+- `infra/m7/provision.ps1` prints a dry-run plan by default and can apply the AWS
+  foundation after AWS CLI authentication.
 
 ## Project Docs
 
