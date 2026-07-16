@@ -59,6 +59,9 @@ function Write-Step {
 function Get-AccountId {
     $identity = Invoke-Aws @("sts", "get-caller-identity", "--output", "json") -Json
     if ($identity) {
+        if ($Apply -and $identity.Arn.EndsWith(":root")) {
+            throw "Refusing to apply AWS changes as the root account. Configure IAM Identity Center or an admin IAM user, then rerun."
+        }
         return $identity.Account
     }
     return "<ACCOUNT_ID>"

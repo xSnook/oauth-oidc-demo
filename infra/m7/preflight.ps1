@@ -48,6 +48,7 @@ if ($hasAws) {
     try {
         $identity = aws sts get-caller-identity --output json | ConvertFrom-Json
         Write-Check "AWS credentials" $true "Account $($identity.Account), ARN $($identity.Arn)"
+        Write-Check "non-root AWS identity" (-not $identity.Arn.EndsWith(":root")) "Do not provision from the root account; use IAM Identity Center or an admin IAM user."
     } catch {
         Write-Check "AWS credentials" $false "Run aws configure sso, aws sso login, or aws configure."
     }

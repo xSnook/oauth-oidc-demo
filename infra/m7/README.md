@@ -43,6 +43,10 @@ aws sso login
 aws sts get-caller-identity
 ```
 
+Do not apply provisioning as the AWS root account. Root is only for account recovery and a
+small set of account ownership tasks such as MFA and billing setup. Use IAM Identity Center
+or an admin IAM user for M7 provisioning.
+
 Create a local config file:
 
 ```powershell
