@@ -35,7 +35,10 @@ function Invoke-Aws {
         return $null
     }
 
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $output = & aws @Args 2>&1
+    $ErrorActionPreference = $previousErrorActionPreference
     if ($LASTEXITCODE -ne 0) {
         if ($AllowFailure) {
             return $null
@@ -123,7 +126,7 @@ function Ensure-OidcProvider {
             "iam", "create-open-id-connect-provider",
             "--url", "https://token.actions.githubusercontent.com",
             "--client-id-list", "sts.amazonaws.com"
-        )
+        ) | Out-Null
     }
     return $arn
 }
