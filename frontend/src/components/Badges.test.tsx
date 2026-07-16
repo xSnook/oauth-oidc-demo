@@ -11,8 +11,8 @@ describe('badges', () => {
   });
 
   it('renders role badges with role classes', () => {
-    render(<RoleBadge role="admin" />);
+    render(<RoleBadge role="owner" />);
 
-    expect(screen.getByText('admin')).toHaveClass('badge', 'role-admin');
+    expect(screen.getByText('owner')).toHaveClass('badge', 'role-owner');
   });
 });

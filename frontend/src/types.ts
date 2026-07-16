@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'user';
+export type Role = 'owner' | 'admin' | 'user';
 export type Provider = 'google' | 'microsoft';
 
 export interface User {

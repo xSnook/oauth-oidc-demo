@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
-import { adminUser, regularUser, userList } from '../test/fixtures';
+import { adminUser, ownerUser, regularUser, userList } from '../test/fixtures';
 import type { User } from '../types';
 import { AdminUsersPage } from './AdminUsersPage';
 
@@ -126,6 +126,35 @@ describe('AdminUsersPage', () => {
       expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/status', { is_active: false }),
     );
     expect(within(regularRow).getByText('Inactive')).toBeInTheDocument();
+  });
+
+  it('lets owners assign owner role', async () => {
+    authState.value = { user: ownerUser };
+    apiMocks.get.mockResolvedValueOnce({ items: [ownerUser, regularUser], total: 2 });
+    apiMocks.patch.mockResolvedValueOnce({ ...regularUser, role: 'owner' });
+    const user = userEvent.setup();
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('user@example.com');
+    const regularRow = rowFor('user@example.com');
+    await user.selectOptions(within(regularRow).getByRole('combobox'), 'owner');
+
+    await waitFor(() =>
+      expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/role', { role: 'owner' }),
+    );
+    expect(within(regularRow).getByRole('combobox')).toHaveValue('owner');
+  });
+
+  it('prevents admins from editing owner accounts', async () => {
+    apiMocks.get.mockResolvedValueOnce({ items: [adminUser, ownerUser], total: 2 });
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('owner@example.com');
+    const ownerRow = rowFor('owner@example.com');
+    expect(within(ownerRow).getByRole('combobox')).toBeDisabled();
+    expect(within(ownerRow).getByRole('checkbox')).toBeDisabled();
   });
 
   it('does not call update endpoints when values do not change', async () => {

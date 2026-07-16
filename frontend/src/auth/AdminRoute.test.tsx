@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { adminUser, regularUser } from '../test/fixtures';
+import { adminUser, ownerUser, regularUser } from '../test/fixtures';
 import type { User } from '../types';
 import { AdminRoute } from './AdminRoute';
 
@@ -59,6 +59,14 @@ describe('AdminRoute', () => {
 
   it('renders admin content for admins', () => {
     authState.value = { user: adminUser, loading: false };
+
+    renderRoute();
+
+    expect(screen.getByText('admin content')).toBeInTheDocument();
+  });
+
+  it('renders admin content for owners', () => {
+    authState.value = { user: ownerUser, loading: false };
 
     renderRoute();
 

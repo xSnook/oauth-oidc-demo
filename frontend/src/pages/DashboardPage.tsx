@@ -56,7 +56,7 @@ export function DashboardPage() {
       </div>
 
       <div className="card-grid">
-        {user?.role === 'admin' ? (
+        {user?.role === 'owner' || user?.role === 'admin' ? (
           <Link className="link-card" to="/admin/users">
             <span>Administration</span>
             <strong>Manage users</strong>

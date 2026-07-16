@@ -10,7 +10,9 @@ export function Layout() {
         <div className="brand-mark">OO</div>
         <nav className="nav-links" aria-label="Primary">
           <NavLink to="/dashboard">Dashboard</NavLink>
-          {user?.role === 'admin' ? <NavLink to="/admin/users">Users</NavLink> : null}
+          {user?.role === 'owner' || user?.role === 'admin' ? (
+            <NavLink to="/admin/users">Users</NavLink>
+          ) : null}
         </nav>
         <div className="topbar-user">
           <span>{user?.email}</span>

@@ -28,6 +28,19 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
     return user
 
 
+def _is_owner(user: User) -> bool:
+    return user.role == "owner"
+
+
+def _ensure_owner_mutation_allowed(current_user: User, target_user: User) -> None:
+    if _is_owner(target_user) and not _is_owner(current_user):
+        raise app_error(
+            status.HTTP_403_FORBIDDEN,
+            "CANNOT_MODIFY_OWNER",
+            "Only owners can modify owner accounts",
+        )
+
+
 @router.get("", response_model=UserListOut)
 def list_users(
     db: Annotated[Session, Depends(get_db)],
@@ -58,6 +71,13 @@ def update_user_role(
         )
 
     user = _get_user_or_404(db, user_id)
+    _ensure_owner_mutation_allowed(current_user, user)
+    if body.role == "owner" and not _is_owner(current_user):
+        raise app_error(
+            status.HTTP_403_FORBIDDEN,
+            "CANNOT_ASSIGN_OWNER",
+            "Only owners can assign the owner role",
+        )
     user.role = body.role
     db.commit()
     db.refresh(user)
@@ -79,6 +99,7 @@ def update_user_status(
         )
 
     user = _get_user_or_404(db, user_id)
+    _ensure_owner_mutation_allowed(current_user, user)
     user.is_active = body.is_active
     db.commit()
     db.refresh(user)

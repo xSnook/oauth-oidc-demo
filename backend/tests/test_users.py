@@ -80,6 +80,42 @@ def test_admin_can_update_user_role(client, monkeypatch):
     assert response.json()["role"] == "admin"
 
 
+def test_owner_can_assign_owner_role(client, monkeypatch):
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+    user = _login(client, monkeypatch, "user@example.com", "user-sub")
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": "owner"})
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "owner"
+
+
+def test_admin_cannot_assign_owner_role(client, monkeypatch):
+    _login(client, monkeypatch, "helper@example.com", "helper-sub")
+    _set_role("helper@example.com", "admin")
+    user = _login(client, monkeypatch, "user@example.com", "user-sub")
+    _login(client, monkeypatch, "helper@example.com", "helper-sub")
+
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": "owner"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "CANNOT_ASSIGN_OWNER"
+
+
+def test_admin_cannot_change_owner_role(client, monkeypatch):
+    owner = _login(client, monkeypatch, "admin@example.com", "owner-sub")
+    admin = _login(client, monkeypatch, "helper@example.com", "helper-sub")
+    _set_role("helper@example.com", "admin")
+    _login(client, monkeypatch, "helper@example.com", "helper-sub")
+
+    response = client.patch(f"/api/users/{owner['id']}/role", json={"role": "admin"})
+
+    assert admin["role"] == "user"
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "CANNOT_MODIFY_OWNER"
+
+
 def test_admin_cannot_change_own_role(client, monkeypatch):
     admin = _login(client, monkeypatch, "admin@example.com", "admin-sub")
 
@@ -100,6 +136,20 @@ def test_admin_can_update_user_status(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["is_active"] is False
+
+
+def test_admin_cannot_deactivate_owner(client, monkeypatch):
+    owner = _login(client, monkeypatch, "admin@example.com", "owner-sub")
+    _login(client, monkeypatch, "helper@example.com", "helper-sub")
+    _set_role("helper@example.com", "admin")
+    _login(client, monkeypatch, "helper@example.com", "helper-sub")
+
+    response = client.patch(
+        f"/api/users/{owner['id']}/status", json={"is_active": False}
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "CANNOT_MODIFY_OWNER"
 
 
 def test_admin_cannot_deactivate_self(client, monkeypatch):

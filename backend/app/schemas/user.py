@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_serializer
 
-Role = Literal["admin", "user"]
+Role = Literal["owner", "admin", "user"]
 Provider = Literal["google", "microsoft"]
 
 

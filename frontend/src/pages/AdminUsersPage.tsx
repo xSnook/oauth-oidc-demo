@@ -78,6 +78,8 @@ export function AdminUsersPage() {
     }
   }
 
+  const currentUserIsOwner = currentUser?.role === 'owner';
+
   return (
     <section className="page-stack">
       <div className="page-heading">
@@ -112,9 +114,12 @@ export function AdminUsersPage() {
           <tbody>
             {users.map((item) => {
               const isSelf = item.id === currentUser?.id;
-              const disabled = isSelf || savingId === item.id;
-              const selfTitle = isSelf
+              const isProtectedOwner = item.role === 'owner' && !currentUserIsOwner;
+              const disabled = isSelf || isProtectedOwner || savingId === item.id;
+              const controlTitle = isSelf
                 ? 'You cannot change your own role or deactivate yourself'
+                : isProtectedOwner
+                  ? 'Only owners can change owner accounts'
                 : undefined;
 
               return (
@@ -137,18 +142,21 @@ export function AdminUsersPage() {
                     <select
                       value={item.role}
                       disabled={disabled}
-                      title={selfTitle}
+                      title={controlTitle}
                       onChange={(event) => void updateRole(item, event.target.value as Role)}
                     >
                       <option value="user">user</option>
                       <option value="admin">admin</option>
+                      {currentUserIsOwner || item.role === 'owner' ? (
+                        <option value="owner">owner</option>
+                      ) : null}
                     </select>
                     <span className="table-badge-fallback">
                       <RoleBadge role={item.role} />
                     </span>
                   </td>
                   <td>
-                    <label className="switch-control" title={selfTitle}>
+                    <label className="switch-control" title={controlTitle}>
                       <input
                         type="checkbox"
                         checked={item.is_active}

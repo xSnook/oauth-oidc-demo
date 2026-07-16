@@ -28,19 +28,8 @@ def _lookup_identity(db: Session, ident: VerifiedIdentity) -> UserIdentity | Non
     )
 
 
-def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
-    identity = _lookup_identity(db, ident)
-    if identity:
-        user = identity.user
-        if not user.is_active:
-            raise AccountDisabled
-        user.last_login_at = _utcnow()
-        identity.provider_email = ident.email
-        db.commit()
-        db.refresh(user)
-        return user
-
-    is_admin = ident.email in settings.admin_email_set and (
+def _is_configured_owner_identity(ident: VerifiedIdentity) -> bool:
+    return ident.email.lower() in settings.admin_email_set and (
         ident.provider == "google"
         or (
             ident.provider == "microsoft"
@@ -48,10 +37,26 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
             and ident.tenant_id == settings.azure_admin_tenant_id
         )
     )
+
+
+def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
+    identity = _lookup_identity(db, ident)
+    if identity:
+        user = identity.user
+        if not user.is_active:
+            raise AccountDisabled
+        user.last_login_at = _utcnow()
+        if _is_configured_owner_identity(ident):
+            user.role = "owner"
+        identity.provider_email = ident.email
+        db.commit()
+        db.refresh(user)
+        return user
+
     user = User(
         email=ident.email,
         display_name=ident.display_name,
-        role="admin" if is_admin else "user",
+        role="owner" if _is_configured_owner_identity(ident) else "user",
         is_active=True,
         last_login_at=_utcnow(),
     )
@@ -76,6 +81,8 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
         if not user.is_active:
             raise AccountDisabled
         user.last_login_at = _utcnow()
+        if _is_configured_owner_identity(ident):
+            user.role = "owner"
         identity.provider_email = ident.email
         db.commit()
         db.refresh(user)

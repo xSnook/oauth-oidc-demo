@@ -11,6 +11,17 @@ export const adminUser: User = {
   last_login_at: null,
 };
 
+export const ownerUser: User = {
+  id: 4,
+  email: 'owner@example.com',
+  display_name: 'Owner User',
+  role: 'owner',
+  is_active: true,
+  auth_providers: ['google'],
+  created_at: '2026-07-15T00:00:00Z',
+  last_login_at: null,
+};
+
 export const regularUser: User = {
   id: 2,
   email: 'user@example.com',
