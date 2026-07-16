@@ -9,6 +9,7 @@ from app.db import get_db
 from app.errors import app_error
 from app.models import User
 from app.schemas.user import (
+    Role,
     RoleUpdateRequest,
     StatusUpdateRequest,
     UserListOut,
@@ -29,7 +30,7 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
 
 
 def _is_owner(user: User) -> bool:
-    return user.role == "owner"
+    return user.role == Role.OWNER
 
 
 def _ensure_owner_mutation_allowed(current_user: User, target_user: User) -> None:
@@ -72,7 +73,7 @@ def update_user_role(
 
     user = _get_user_or_404(db, user_id)
     _ensure_owner_mutation_allowed(current_user, user)
-    if body.role == "owner" and not _is_owner(current_user):
+    if body.role == Role.OWNER and not _is_owner(current_user):
         raise app_error(
             status.HTTP_403_FORBIDDEN,
             "CANNOT_ASSIGN_OWNER",

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import VerifiedIdentity
 from app.config import settings
 from app.models import User, UserIdentity
+from app.schemas.user import Role
 
 
 class AccountDisabled(Exception):
@@ -47,7 +48,7 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
             raise AccountDisabled
         user.last_login_at = _utcnow()
         if _is_configured_owner_identity(ident):
-            user.role = "owner"
+            user.role = Role.OWNER
         identity.provider_email = ident.email
         db.commit()
         db.refresh(user)
@@ -56,7 +57,7 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
     user = User(
         email=ident.email,
         display_name=ident.display_name,
-        role="owner" if _is_configured_owner_identity(ident) else "user",
+        role=Role.OWNER if _is_configured_owner_identity(ident) else Role.USER,
         is_active=True,
         last_login_at=_utcnow(),
     )
@@ -82,7 +83,7 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
             raise AccountDisabled
         user.last_login_at = _utcnow()
         if _is_configured_owner_identity(ident):
-            user.role = "owner"
+            user.role = Role.OWNER
         identity.provider_email = ident.email
         db.commit()
         db.refresh(user)

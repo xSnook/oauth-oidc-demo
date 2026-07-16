@@ -3,7 +3,7 @@ import { ApiError, apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { RoleBadge } from '../components/RoleBadge';
-import type { Role, User, UserList } from '../types';
+import { Role, type User, type UserList } from '../types';
 
 export function AdminUsersPage() {
   const { user: currentUser } = useAuth();
@@ -78,7 +78,7 @@ export function AdminUsersPage() {
     }
   }
 
-  const currentUserIsOwner = currentUser?.role === 'owner';
+  const currentUserIsOwner = currentUser?.role === Role.Owner;
 
   return (
     <section className="page-stack">
@@ -114,7 +114,7 @@ export function AdminUsersPage() {
           <tbody>
             {users.map((item) => {
               const isSelf = item.id === currentUser?.id;
-              const isProtectedOwner = item.role === 'owner' && !currentUserIsOwner;
+              const isProtectedOwner = item.role === Role.Owner && !currentUserIsOwner;
               const disabled = isSelf || isProtectedOwner || savingId === item.id;
               const controlTitle = isSelf
                 ? 'You cannot change your own role or deactivate yourself'
@@ -145,10 +145,10 @@ export function AdminUsersPage() {
                       title={controlTitle}
                       onChange={(event) => void updateRole(item, event.target.value as Role)}
                     >
-                      <option value="user">user</option>
-                      <option value="admin">admin</option>
-                      {currentUserIsOwner || item.role === 'owner' ? (
-                        <option value="owner">owner</option>
+                      <option value={Role.User}>user</option>
+                      <option value={Role.Admin}>admin</option>
+                      {currentUserIsOwner || item.role === Role.Owner ? (
+                        <option value={Role.Owner}>owner</option>
                       ) : null}
                     </select>
                     <span className="table-badge-fallback">

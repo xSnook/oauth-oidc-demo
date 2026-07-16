@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { Role } from '../types';
 import { ProviderBadge } from './ProviderBadge';
 import { RoleBadge } from './RoleBadge';
 
@@ -11,7 +12,7 @@ describe('badges', () => {
   });
 
   it('renders role badges with role classes', () => {
-    render(<RoleBadge role="owner" />);
+    render(<RoleBadge role={Role.Owner} />);
 
     expect(screen.getByText('owner')).toHaveClass('badge', 'role-owner');
   });

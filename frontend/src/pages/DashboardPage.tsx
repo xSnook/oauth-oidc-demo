@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ApiError, apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { RoleBadge } from '../components/RoleBadge';
-import type { Dashboard } from '../types';
+import { Role, type Dashboard } from '../types';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -56,7 +56,7 @@ export function DashboardPage() {
       </div>
 
       <div className="card-grid">
-        {user?.role === 'owner' || user?.role === 'admin' ? (
+        {user?.role === Role.Owner || user?.role === Role.Admin ? (
           <Link className="link-card" to="/admin/users">
             <span>Administration</span>
             <strong>Manage users</strong>

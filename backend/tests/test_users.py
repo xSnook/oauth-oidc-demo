@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from app.auth import VerifiedIdentity
 from app.models import User
+from app.schemas.user import Role
 from tests.conftest import TestingSessionLocal
 
 
@@ -26,7 +27,7 @@ def _login(
     return response.json()
 
 
-def _set_role(email: str, role: str) -> None:
+def _set_role(email: str, role: Role) -> None:
     with TestingSessionLocal() as db:
         user = db.scalar(select(User).where(User.email == email))
         assert user is not None
@@ -74,10 +75,10 @@ def test_admin_can_update_user_role(client, monkeypatch):
     user = _login(client, monkeypatch, "user@example.com", "user-sub")
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
 
-    response = client.patch(f"/api/users/{user['id']}/role", json={"role": "admin"})
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": Role.ADMIN})
 
     assert response.status_code == 200
-    assert response.json()["role"] == "admin"
+    assert response.json()["role"] == Role.ADMIN
 
 
 def test_owner_can_assign_owner_role(client, monkeypatch):
@@ -85,19 +86,19 @@ def test_owner_can_assign_owner_role(client, monkeypatch):
     user = _login(client, monkeypatch, "user@example.com", "user-sub")
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
 
-    response = client.patch(f"/api/users/{user['id']}/role", json={"role": "owner"})
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": Role.OWNER})
 
     assert response.status_code == 200
-    assert response.json()["role"] == "owner"
+    assert response.json()["role"] == Role.OWNER
 
 
 def test_admin_cannot_assign_owner_role(client, monkeypatch):
     _login(client, monkeypatch, "helper@example.com", "helper-sub")
-    _set_role("helper@example.com", "admin")
+    _set_role("helper@example.com", Role.ADMIN)
     user = _login(client, monkeypatch, "user@example.com", "user-sub")
     _login(client, monkeypatch, "helper@example.com", "helper-sub")
 
-    response = client.patch(f"/api/users/{user['id']}/role", json={"role": "owner"})
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": Role.OWNER})
 
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "CANNOT_ASSIGN_OWNER"
@@ -106,12 +107,12 @@ def test_admin_cannot_assign_owner_role(client, monkeypatch):
 def test_admin_cannot_change_owner_role(client, monkeypatch):
     owner = _login(client, monkeypatch, "admin@example.com", "owner-sub")
     admin = _login(client, monkeypatch, "helper@example.com", "helper-sub")
-    _set_role("helper@example.com", "admin")
+    _set_role("helper@example.com", Role.ADMIN)
     _login(client, monkeypatch, "helper@example.com", "helper-sub")
 
-    response = client.patch(f"/api/users/{owner['id']}/role", json={"role": "admin"})
+    response = client.patch(f"/api/users/{owner['id']}/role", json={"role": Role.ADMIN})
 
-    assert admin["role"] == "user"
+    assert admin["role"] == Role.USER
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "CANNOT_MODIFY_OWNER"
 
@@ -119,7 +120,7 @@ def test_admin_cannot_change_owner_role(client, monkeypatch):
 def test_admin_cannot_change_own_role(client, monkeypatch):
     admin = _login(client, monkeypatch, "admin@example.com", "admin-sub")
 
-    response = client.patch(f"/api/users/{admin['id']}/role", json={"role": "user"})
+    response = client.patch(f"/api/users/{admin['id']}/role", json={"role": Role.USER})
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "CANNOT_MODIFY_SELF"
@@ -141,7 +142,7 @@ def test_admin_can_update_user_status(client, monkeypatch):
 def test_admin_cannot_deactivate_owner(client, monkeypatch):
     owner = _login(client, monkeypatch, "admin@example.com", "owner-sub")
     _login(client, monkeypatch, "helper@example.com", "helper-sub")
-    _set_role("helper@example.com", "admin")
+    _set_role("helper@example.com", Role.ADMIN)
     _login(client, monkeypatch, "helper@example.com", "helper-sub")
 
     response = client.patch(
@@ -166,7 +167,7 @@ def test_admin_cannot_deactivate_self(client, monkeypatch):
 def test_missing_user_returns_404(client, monkeypatch):
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
 
-    role_response = client.patch("/api/users/999/role", json={"role": "user"})
+    role_response = client.patch("/api/users/999/role", json={"role": Role.USER})
     status_response = client.patch("/api/users/999/status", json={"is_active": True})
 
     assert role_response.status_code == 404
@@ -198,11 +199,11 @@ def test_dashboard_returns_real_counts(client, monkeypatch):
 
 def test_non_admin_cannot_update_user_role(client, monkeypatch):
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
-    _set_role("admin@example.com", "user")
+    _set_role("admin@example.com", Role.USER)
     other_user = _login(client, monkeypatch, "other@example.com", "other-sub")
 
     response = client.patch(
-        f"/api/users/{other_user['id']}/role", json={"role": "admin"}
+        f"/api/users/{other_user['id']}/role", json={"role": Role.ADMIN}
     )
 
     assert response.status_code == 403

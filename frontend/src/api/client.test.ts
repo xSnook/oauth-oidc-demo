@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Role } from '../types';
 import { ApiError, api, apiClient, setUnauthorizedHandler } from './client';
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -40,12 +41,12 @@ describe('api client', () => {
   it('adds json headers for requests with bodies', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: 1 }));
 
-    await apiClient.patch('/api/users/1/role', { role: 'admin' });
+    await apiClient.patch('/api/users/1/role', { role: Role.Admin });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/users/1/role', {
       credentials: 'same-origin',
       method: 'PATCH',
-      body: JSON.stringify({ role: 'admin' }),
+      body: JSON.stringify({ role: Role.Admin }),
       headers: { 'content-type': 'application/json' },
     });
   });

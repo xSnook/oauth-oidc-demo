@@ -1,10 +1,16 @@
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_serializer
 
-Role = Literal["owner", "admin", "user"]
 Provider = Literal["google", "microsoft"]
+
+
+class Role(StrEnum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    USER = "user"
 
 
 class UserOut(BaseModel):
