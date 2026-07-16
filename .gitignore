@@ -1,4 +1,6 @@
 .env
+infra/m7/m7.config.json
+infra/m7/*.pem
 frontend/.env
 node_modules/
 dist/

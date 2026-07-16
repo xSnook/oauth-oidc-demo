@@ -1,0 +1,18 @@
+{
+  "region": "us-east-1",
+  "repoOwner": "xSnook",
+  "repoName": "oauth-oidc-demo",
+  "domain": "example.com",
+  "adminEmails": "you@example.com",
+  "googleClientId": "000000000000-example.apps.googleusercontent.com",
+  "azureClientId": "",
+  "azureAdminTenantId": "",
+  "vpcId": "",
+  "publicSubnetId": "",
+  "dbSubnetIds": [],
+  "route53HostedZoneId": "",
+  "createRoute53Zone": false,
+  "ec2InstanceType": "t3.small",
+  "dbInstanceClass": "db.t4g.micro",
+  "dbAllocatedStorageGb": 20
+}
