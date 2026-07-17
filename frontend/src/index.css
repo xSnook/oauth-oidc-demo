@@ -366,6 +366,8 @@ p {
 
 .stack-card {
   display: grid;
+  align-content: start;
+  align-items: start;
   gap: 8px;
 }
 
