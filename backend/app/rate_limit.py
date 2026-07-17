@@ -93,7 +93,11 @@ class RedisRateLimiter:
         if rule is None:
             return RateLimitDecision(allowed=True)
 
-        key = self._key(rule, request)
+        client_ip = _client_ip(request)
+        if client_ip is None:
+            return RateLimitDecision(allowed=False, retry_after_seconds=1)
+
+        key = self._key(rule, client_ip)
         try:
             count = await self.redis.incr(key)
             if count == 1:
@@ -115,15 +119,16 @@ class RedisRateLimiter:
     def _matching_rule(self, request: Request) -> RateLimitRule | None:
         return next((rule for rule in self.rules if rule.matches(request)), None)
 
-    def _key(self, rule: RateLimitRule, request: Request) -> str:
+    def _key(self, rule: RateLimitRule, client_ip: str) -> str:
         window = int(self.clock() // rule.window_seconds)
-        return f"rate-limit:{rule.name}:{_client_ip(request)}:{window}"
+        return f"rate-limit:{rule.name}:{client_ip}:{window}"
 
 
-def _client_ip(request: Request) -> str:
+def _client_ip(request: Request) -> str | None:
     forwarded_for = request.headers.get("x-forwarded-for", "")
     if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
+        client_ip = forwarded_for.split(",", 1)[0].strip()
+        return client_ip or None
     if request.client:
         return request.client.host
-    return "unknown"
+    return None

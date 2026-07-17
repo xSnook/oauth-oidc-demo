@@ -11,15 +11,19 @@ from app.rate_limit import RateLimitDecision, RateLimitRule, RedisRateLimiter
 def _request(
     path: str = "/api/auth/google",
     method: str = "POST",
-    forwarded_for: str = "203.0.113.10",
+    forwarded_for: str | None = "203.0.113.10",
+    client: tuple[str, int] | None = ("127.0.0.1", 12345),
 ) -> Request:
+    headers = []
+    if forwarded_for is not None:
+        headers.append((b"x-forwarded-for", forwarded_for.encode()))
     return Request(
         {
             "type": "http",
             "method": method,
             "path": path,
-            "headers": [(b"x-forwarded-for", forwarded_for.encode())],
-            "client": ("127.0.0.1", 12345),
+            "headers": headers,
+            "client": client,
             "scheme": "http",
             "server": ("testserver", 80),
             "query_string": b"",
@@ -102,6 +106,14 @@ def test_redis_rate_limiter_can_fail_closed_when_configured() -> None:
     limiter = _limiter(BrokenRedis(), fail_open=False)
 
     decision = asyncio.run(limiter.check(_request()))
+
+    assert decision == RateLimitDecision(allowed=False, retry_after_seconds=1)
+
+
+def test_redis_rate_limiter_fails_closed_without_client_identity() -> None:
+    limiter = _limiter(FakeRedis(), fail_open=True)
+
+    decision = asyncio.run(limiter.check(_request(forwarded_for=None, client=None)))
 
     assert decision == RateLimitDecision(allowed=False, retry_after_seconds=1)
 
