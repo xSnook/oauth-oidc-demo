@@ -9,6 +9,9 @@ from app.config import settings
 from app.models import User, UserIdentity
 from app.schemas.user import Role
 
+CONFIGURED_OWNER_EMAILS = frozenset(settings.admin_email_set)
+CONFIGURED_AZURE_OWNER_TENANT_ID = settings.azure_admin_tenant_id
+
 
 class AccountDisabled(Exception):
     pass
@@ -30,12 +33,12 @@ def _lookup_identity(db: Session, ident: VerifiedIdentity) -> UserIdentity | Non
 
 
 def _is_configured_owner_identity(ident: VerifiedIdentity) -> bool:
-    return ident.email.lower() in settings.admin_email_set and (
+    return ident.email.lower() in CONFIGURED_OWNER_EMAILS and (
         ident.provider == "google"
         or (
             ident.provider == "microsoft"
-            and settings.azure_admin_tenant_id
-            and ident.tenant_id == settings.azure_admin_tenant_id
+            and CONFIGURED_AZURE_OWNER_TENANT_ID
+            and ident.tenant_id == CONFIGURED_AZURE_OWNER_TENANT_ID
         )
     )
 
