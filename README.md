@@ -12,6 +12,22 @@ Human setup and local environment steps are documented in `SETUP.md`. In short, 
 `.env.example` to `.env`, fill in the client IDs and `SESSION_JWT_SECRET`, then use Docker
 Compose for local development.
 
+## Redis Rate Limiting
+
+The backend uses Redis-backed fixed-window rate limits for API guardrails. Local Docker
+Compose starts a `redis:7.4-alpine` service automatically; production Compose runs the same
+Redis container on the EC2 app host, so this adds no managed AWS service cost.
+
+Default buckets:
+
+- `POST /api/auth/google`: 10 requests/minute per IP.
+- `POST /api/auth/logout`: 30 requests/minute per IP.
+- `PATCH /api/users/*`: 30 requests/minute per IP.
+- Other `/api/*` routes: 120 requests/minute per IP.
+
+Tune with `RATE_LIMIT_*` environment variables in `.env` or SSM. If Redis is unavailable,
+the limiter fails open by default so app availability is not tied to Redis.
+
 M7 production setup helpers live in `infra/m7/`:
 
 - `infra/m7/README.md` documents the AWS/domain/GitHub runbook.

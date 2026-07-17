@@ -20,8 +20,12 @@ services:
     restart: unless-stopped
     env_file:
       - ./api.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
     expose:
       - "8000"
+    depends_on:
+      - redis
     healthcheck:
       test:
         [
@@ -39,6 +43,18 @@ services:
     restart: unless-stopped
     expose:
       - "80"
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly no --save ""
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   caddy_data:

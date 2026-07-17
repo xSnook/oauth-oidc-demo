@@ -23,6 +23,7 @@ set_test_env_default(
 set_test_env_default("COOKIE_SECURE", "false")
 set_test_env_default("GOOGLE_CLIENT_ID", "test-google-client")
 set_test_env_default("AZURE_CLIENT_ID", "")
+set_test_env_default("RATE_LIMIT_ENABLED", "false")
 os.environ["ADMIN_EMAILS"] = "admin@example.com"
 
 from app.db import get_db  # noqa: E402
