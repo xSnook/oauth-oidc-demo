@@ -364,8 +364,16 @@ p {
   gap: 8px;
 }
 
+.flow-grid > div {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
 .stack-card {
   display: grid;
+  align-content: start;
+  align-items: start;
   gap: 8px;
 }
 
