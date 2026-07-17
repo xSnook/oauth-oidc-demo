@@ -50,8 +50,6 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
         if not user.is_active:
             raise AccountDisabled
         user.last_login_at = _utcnow()
-        if _is_configured_owner_identity(ident):
-            user.role = Role.OWNER
         identity.provider_email = ident.email
         db.commit()
         db.refresh(user)
@@ -85,8 +83,6 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
         if not user.is_active:
             raise AccountDisabled
         user.last_login_at = _utcnow()
-        if _is_configured_owner_identity(ident):
-            user.role = Role.OWNER
         identity.provider_email = ident.email
         db.commit()
         db.refresh(user)
