@@ -333,18 +333,13 @@ p {
   gap: 14px;
 }
 
-.info-section h2,
-.stack-card h3 {
+.info-section h2 {
   margin: 0;
   letter-spacing: 0;
 }
 
 .info-section h2 {
   font-size: 19px;
-}
-
-.stack-card h3 {
-  font-size: 16px;
 }
 
 .architecture-summary,
@@ -369,13 +364,20 @@ p {
   gap: 8px;
 }
 
-.architecture-summary span {
+.stack-card {
+  display: grid;
+  gap: 8px;
+}
+
+.architecture-summary span,
+.stack-card span {
   color: #686860;
   font-size: 13px;
   font-weight: 650;
 }
 
-.architecture-summary strong {
+.architecture-summary strong,
+.stack-card strong {
   font-size: 18px;
 }
 

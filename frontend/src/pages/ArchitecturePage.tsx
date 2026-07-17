@@ -1,14 +1,17 @@
 const stackSections = [
   {
     title: 'Frontend',
+    summary: 'Browser application',
     items: ['React', 'Vite', 'TypeScript', 'React Router', 'Vitest', 'Testing Library'],
   },
   {
     title: 'Backend',
+    summary: 'API and persistence',
     items: ['FastAPI', 'SQLAlchemy', 'Alembic', 'MySQL', 'Redis rate limiting'],
   },
   {
     title: 'Infrastructure',
+    summary: 'Delivery and hosting',
     items: ['Docker Compose', 'GitHub Actions', 'Amazon ECR', 'EC2', 'RDS', 'Route 53', 'Caddy'],
   },
 ];
@@ -69,7 +72,8 @@ export function ArchitecturePage() {
         <div className="stack-grid">
           {stackSections.map((section) => (
             <article className="stack-card" key={section.title}>
-              <h3>{section.title}</h3>
+              <span>{section.title}</span>
+              <strong>{section.summary}</strong>
               <ul className="tag-list" aria-label={`${section.title} technologies`}>
                 {section.items.map((item) => (
                   <li key={item}>{item}</li>

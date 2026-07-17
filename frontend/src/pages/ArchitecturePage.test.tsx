@@ -16,14 +16,17 @@ describe('ArchitecturePage', () => {
     const frontendStack = screen.getByLabelText('Frontend technologies');
     expect(within(frontendStack).getByText('React')).toBeInTheDocument();
     expect(within(frontendStack).getByText('Vitest')).toBeInTheDocument();
+    expect(screen.getByText('Browser application')).toBeInTheDocument();
 
     const backendStack = screen.getByLabelText('Backend technologies');
     expect(within(backendStack).getByText('FastAPI')).toBeInTheDocument();
     expect(within(backendStack).getByText('Redis rate limiting')).toBeInTheDocument();
+    expect(screen.getByText('API and persistence')).toBeInTheDocument();
 
     const infrastructureStack = screen.getByLabelText('Infrastructure technologies');
     expect(within(infrastructureStack).getByText('GitHub Actions')).toBeInTheDocument();
     expect(within(infrastructureStack).getByText('Route 53')).toBeInTheDocument();
+    expect(screen.getByText('Delivery and hosting')).toBeInTheDocument();
   });
 
   it('explains auth flow and security boundaries', () => {
