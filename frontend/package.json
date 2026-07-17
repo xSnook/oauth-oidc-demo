@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "lint": "tsc --noEmit && eslint src",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "test:file": "vitest run"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.1",
