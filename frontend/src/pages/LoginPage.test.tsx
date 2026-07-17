@@ -177,6 +177,34 @@ describe('LoginPage', () => {
     expect(screen.getByText('Bad token.')).toBeInTheDocument();
   });
 
+  it('shows rate limit errors from Google sign-in', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    let callback: ((response: { credential: string }) => void | Promise<void>) | undefined;
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn((options) => {
+            callback = options.callback;
+          }),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockRejectedValueOnce(
+      new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please retry later.'),
+    );
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await callback?.({ credential: 'id-token' });
+    });
+
+    expect(screen.getByText('Too many requests. Please retry later.')).toBeInTheDocument();
+  });
+
   it('shows fallback errors from Google sign-in', async () => {
     vi.useFakeTimers();
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
