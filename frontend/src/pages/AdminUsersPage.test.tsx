@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
-import { adminUser, regularUser, userList } from '../test/fixtures';
-import type { User } from '../types';
+import { adminUser, ownerUser, regularUser, userList } from '../test/fixtures';
+import { Role, type User } from '../types';
 import { AdminUsersPage } from './AdminUsersPage';
 
 const authState = vi.hoisted(() => ({
@@ -105,20 +105,20 @@ describe('AdminUsersPage', () => {
   it('updates role and status after the server confirms', async () => {
     apiMocks.get.mockResolvedValueOnce(userList);
     apiMocks.patch
-      .mockResolvedValueOnce({ ...regularUser, role: 'admin' })
-      .mockResolvedValueOnce({ ...regularUser, role: 'admin', is_active: false });
+      .mockResolvedValueOnce({ ...regularUser, role: Role.Admin })
+      .mockResolvedValueOnce({ ...regularUser, role: Role.Admin, is_active: false });
     const user = userEvent.setup();
 
     render(<AdminUsersPage />);
 
     await screen.findByText('user@example.com');
     const regularRow = rowFor('user@example.com');
-    await user.selectOptions(within(regularRow).getByRole('combobox'), 'admin');
+    await user.selectOptions(within(regularRow).getByRole('combobox'), Role.Admin);
 
     await waitFor(() =>
-      expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/role', { role: 'admin' }),
+      expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/role', { role: Role.Admin }),
     );
-    expect(within(regularRow).getByRole('combobox')).toHaveValue('admin');
+    expect(within(regularRow).getByRole('combobox')).toHaveValue(Role.Admin);
 
     await user.click(within(regularRow).getByRole('checkbox'));
 
@@ -128,6 +128,35 @@ describe('AdminUsersPage', () => {
     expect(within(regularRow).getByText('Inactive')).toBeInTheDocument();
   });
 
+  it('lets owners assign owner role', async () => {
+    authState.value = { user: ownerUser };
+    apiMocks.get.mockResolvedValueOnce({ items: [ownerUser, regularUser], total: 2 });
+    apiMocks.patch.mockResolvedValueOnce({ ...regularUser, role: Role.Owner });
+    const user = userEvent.setup();
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('user@example.com');
+    const regularRow = rowFor('user@example.com');
+    await user.selectOptions(within(regularRow).getByRole('combobox'), Role.Owner);
+
+    await waitFor(() =>
+      expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/role', { role: Role.Owner }),
+    );
+    expect(within(regularRow).getByRole('combobox')).toHaveValue(Role.Owner);
+  });
+
+  it('prevents admins from editing owner accounts', async () => {
+    apiMocks.get.mockResolvedValueOnce({ items: [adminUser, ownerUser], total: 2 });
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('owner@example.com');
+    const ownerRow = rowFor('owner@example.com');
+    expect(within(ownerRow).getByRole('combobox')).toBeDisabled();
+    expect(within(ownerRow).getByRole('checkbox')).toBeDisabled();
+  });
+
   it('does not call update endpoints when values do not change', async () => {
     apiMocks.get.mockResolvedValueOnce(userList);
 
@@ -135,7 +164,9 @@ describe('AdminUsersPage', () => {
 
     await screen.findByText('user@example.com');
     const regularRow = rowFor('user@example.com');
-    fireEvent.change(within(regularRow).getByRole('combobox'), { target: { value: 'user' } });
+    fireEvent.change(within(regularRow).getByRole('combobox'), {
+      target: { value: Role.User },
+    });
     fireEvent.change(within(regularRow).getByRole('checkbox'), { target: { checked: true } });
 
     expect(apiMocks.patch).not.toHaveBeenCalled();
@@ -185,10 +216,10 @@ describe('AdminUsersPage', () => {
 
     await screen.findByText('user@example.com');
     const regularRow = rowFor('user@example.com');
-    await user.selectOptions(within(regularRow).getByRole('combobox'), 'admin');
+    await user.selectOptions(within(regularRow).getByRole('combobox'), Role.Admin);
 
     expect(await screen.findByText('Role update denied.')).toBeInTheDocument();
-    expect(within(regularRow).getByRole('combobox')).toHaveValue('user');
+    expect(within(regularRow).getByRole('combobox')).toHaveValue(Role.User);
   });
 
   it('shows fallback errors when role updates fail unexpectedly', async () => {
@@ -199,7 +230,7 @@ describe('AdminUsersPage', () => {
     render(<AdminUsersPage />);
 
     await screen.findByText('user@example.com');
-    await user.selectOptions(within(rowFor('user@example.com')).getByRole('combobox'), 'admin');
+    await user.selectOptions(within(rowFor('user@example.com')).getByRole('combobox'), Role.Admin);
 
     expect(await screen.findByText('Role update failed.')).toBeInTheDocument();
   });

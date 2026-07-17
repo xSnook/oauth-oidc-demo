@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.auth import VerifiedIdentity
 from app.models import User, UserIdentity
+from app.schemas.user import Role
 from tests.conftest import TestingSessionLocal
 
 
@@ -28,7 +29,7 @@ def test_first_google_login_provisions_user_and_sets_cookie(client, monkeypatch)
     assert "session=" in response.headers["set-cookie"]
     body = response.json()
     assert body["email"] == "user@example.com"
-    assert body["role"] == "user"
+    assert body["role"] == Role.USER
     assert body["auth_providers"] == ["google"]
 
     with TestingSessionLocal() as db:
@@ -39,7 +40,7 @@ def test_first_google_login_provisions_user_and_sets_cookie(client, monkeypatch)
         assert identity.provider_subject == "google-sub-1"
 
 
-def test_admin_email_is_promoted_only_on_first_login(client, monkeypatch):
+def test_configured_admin_email_is_owner_on_first_login_only(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
         lambda raw_token: _google_identity(email="admin@example.com"),
@@ -47,17 +48,17 @@ def test_admin_email_is_promoted_only_on_first_login(client, monkeypatch):
 
     first = client.post("/api/auth/google", json={"id_token": "token"})
     assert first.status_code == 200
-    assert first.json()["role"] == "admin"
+    assert first.json()["role"] == Role.OWNER
 
     with TestingSessionLocal() as db:
         user = db.scalar(select(User).where(User.email == "admin@example.com"))
         assert user is not None
-        user.role = "user"
+        user.role = Role.USER
         db.commit()
 
     second = client.post("/api/auth/google", json={"id_token": "token"})
     assert second.status_code == 200
-    assert second.json()["role"] == "user"
+    assert second.json()["role"] == Role.USER
 
 
 def test_repeat_login_updates_last_login(client, monkeypatch):

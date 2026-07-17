@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { adminUser, regularUser } from '../test/fixtures';
+import { adminUser, ownerUser, regularUser } from '../test/fixtures';
 import type { User } from '../types';
 import { Layout } from './Layout';
 
@@ -53,6 +53,17 @@ describe('Layout', () => {
   it('shows admin navigation for admins', () => {
     authState.value = {
       user: adminUser,
+      logout: vi.fn(),
+    };
+
+    renderLayout();
+
+    expect(screen.getByRole('link', { name: 'Users' })).toHaveAttribute('href', '/admin/users');
+  });
+
+  it('shows admin navigation for owners', () => {
+    authState.value = {
+      user: ownerUser,
       logout: vi.fn(),
     };
 

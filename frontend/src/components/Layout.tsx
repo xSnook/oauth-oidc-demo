@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { Role } from '../types';
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -10,7 +11,9 @@ export function Layout() {
         <div className="brand-mark">OO</div>
         <nav className="nav-links" aria-label="Primary">
           <NavLink to="/dashboard">Dashboard</NavLink>
-          {user?.role === 'admin' ? <NavLink to="/admin/users">Users</NavLink> : null}
+          {user?.role === Role.Owner || user?.role === Role.Admin ? (
+            <NavLink to="/admin/users">Users</NavLink>
+          ) : null}
         </nav>
         <div className="topbar-user">
           <span>{user?.email}</span>

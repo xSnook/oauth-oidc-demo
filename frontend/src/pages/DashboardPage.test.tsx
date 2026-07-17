@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
-import { adminUser, dashboard, regularUser } from '../test/fixtures';
+import { adminUser, dashboard, ownerUser, regularUser } from '../test/fixtures';
 import type { User } from '../types';
 import { DashboardPage } from './DashboardPage';
 
@@ -64,6 +64,18 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('3')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /AdministrationManage users/ })).toHaveAttribute(
+      'href',
+      '/admin/users',
+    );
+  });
+
+  it('renders admin link for owners', async () => {
+    authState.value = { user: ownerUser };
+    apiMocks.get.mockResolvedValueOnce(dashboard);
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: /AdministrationManage users/ })).toHaveAttribute(
       'href',
       '/admin/users',
     );

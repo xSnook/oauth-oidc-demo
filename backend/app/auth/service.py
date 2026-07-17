@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import VerifiedIdentity
 from app.config import settings
 from app.models import User, UserIdentity
+from app.schemas.user import Role
+
+CONFIGURED_OWNER_EMAILS = frozenset(settings.admin_email_set)
+CONFIGURED_AZURE_OWNER_TENANT_ID = settings.azure_admin_tenant_id
 
 
 class AccountDisabled(Exception):
@@ -28,6 +32,17 @@ def _lookup_identity(db: Session, ident: VerifiedIdentity) -> UserIdentity | Non
     )
 
 
+def _is_configured_owner_identity(ident: VerifiedIdentity) -> bool:
+    return ident.email.lower() in CONFIGURED_OWNER_EMAILS and (
+        ident.provider == "google"
+        or (
+            ident.provider == "microsoft"
+            and CONFIGURED_AZURE_OWNER_TENANT_ID
+            and ident.tenant_id == CONFIGURED_AZURE_OWNER_TENANT_ID
+        )
+    )
+
+
 def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
     identity = _lookup_identity(db, ident)
     if identity:
@@ -40,18 +55,10 @@ def find_or_create_user(db: Session, ident: VerifiedIdentity) -> User:
         db.refresh(user)
         return user
 
-    is_admin = ident.email in settings.admin_email_set and (
-        ident.provider == "google"
-        or (
-            ident.provider == "microsoft"
-            and settings.azure_admin_tenant_id
-            and ident.tenant_id == settings.azure_admin_tenant_id
-        )
-    )
     user = User(
         email=ident.email,
         display_name=ident.display_name,
-        role="admin" if is_admin else "user",
+        role=Role.OWNER if _is_configured_owner_identity(ident) else Role.USER,
         is_active=True,
         last_login_at=_utcnow(),
     )

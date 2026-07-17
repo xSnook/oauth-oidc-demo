@@ -8,6 +8,7 @@ from app.auth.jwt import SESSION_COOKIE_NAME, decode_session_token
 from app.db import get_db
 from app.errors import app_error, not_authenticated
 from app.models import User
+from app.schemas.user import Role
 
 
 def get_current_user(
@@ -37,6 +38,6 @@ def get_current_user(
 
 
 def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
-    if user.role != "admin":
+    if user.role not in {Role.OWNER, Role.ADMIN}:
         raise app_error(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Admin access required")
     return user

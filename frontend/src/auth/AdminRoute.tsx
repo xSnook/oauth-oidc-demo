@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
+import { Role } from '../types';
 import { useAuth } from './AuthContext';
 
 export function AdminRoute() {
@@ -12,7 +13,7 @@ export function AdminRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== 'admin') {
+  if (user.role !== Role.Owner && user.role !== Role.Admin) {
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -1,10 +1,21 @@
-import type { Dashboard, User, UserList } from '../types';
+import { Role, type Dashboard, type User, type UserList } from '../types';
 
 export const adminUser: User = {
   id: 1,
   email: 'admin@example.com',
   display_name: 'Admin User',
-  role: 'admin',
+  role: Role.Admin,
+  is_active: true,
+  auth_providers: ['google'],
+  created_at: '2026-07-15T00:00:00Z',
+  last_login_at: null,
+};
+
+export const ownerUser: User = {
+  id: 4,
+  email: 'owner@example.com',
+  display_name: 'Owner User',
+  role: Role.Owner,
   is_active: true,
   auth_providers: ['google'],
   created_at: '2026-07-15T00:00:00Z',
@@ -15,7 +26,7 @@ export const regularUser: User = {
   id: 2,
   email: 'user@example.com',
   display_name: 'Regular User',
-  role: 'user',
+  role: Role.User,
   is_active: true,
   auth_providers: ['google'],
   created_at: '2026-07-15T00:00:00Z',
@@ -26,7 +37,7 @@ export const microsoftUser: User = {
   id: 3,
   email: 'microsoft@example.com',
   display_name: null,
-  role: 'user',
+  role: Role.User,
   is_active: false,
   auth_providers: ['microsoft'],
   created_at: '2026-07-14T00:00:00Z',

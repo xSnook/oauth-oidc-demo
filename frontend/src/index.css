@@ -252,6 +252,11 @@ p {
   color: #195ca5;
 }
 
+.role-owner {
+  border-color: #b7791f;
+  color: #8a4b10;
+}
+
 .role-user {
   border-color: #a9aaa3;
 }

@@ -1,4 +1,10 @@
-export type Role = 'admin' | 'user';
+export const Role = {
+  Owner: 'owner',
+  Admin: 'admin',
+  User: 'user',
+} as const;
+
+export type Role = (typeof Role)[keyof typeof Role];
 export type Provider = 'google' | 'microsoft';
 
 export interface User {
