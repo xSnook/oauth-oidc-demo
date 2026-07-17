@@ -20,6 +20,17 @@ services:
       retries: 12
       start_period: 30s
 
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly no --save ""
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   api:
     build:
       context: ./backend
@@ -27,6 +38,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}?charset=utf8mb4
+      REDIS_URL: redis://redis:6379/0
       COOKIE_SECURE: "false"
     volumes:
       - ./backend:/app
@@ -34,6 +46,8 @@ services:
       - "8000:8000"
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   web:

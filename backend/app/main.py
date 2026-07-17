@@ -1,21 +1,56 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.config import settings
 from app.errors import error_detail
+from app.rate_limit import RateLimiter, RedisRateLimiter
 from app.routers import auth, dashboard, health, users
 
 logger = logging.getLogger(__name__)
 
 
-def create_app() -> FastAPI:
+def create_app(rate_limiter: RateLimiter | None = None) -> FastAPI:
+    limiter = rate_limiter or RedisRateLimiter.from_settings(settings)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        if limiter:
+            await limiter.close()
+
     app = FastAPI(
         title="OAuth OIDC Demo API",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
+
+    app.state.rate_limiter = limiter
+
+    if limiter:
+
+        @app.middleware("http")
+        async def rate_limit_middleware(request: Request, call_next):
+            decision = await limiter.check(request)
+            if not decision.allowed:
+                retry_after = decision.retry_after_seconds or 1
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={
+                        "detail": error_detail(
+                            "RATE_LIMITED",
+                            "Too many requests. Please retry later.",
+                            retry_after_seconds=retry_after,
+                        )
+                    },
+                    headers={"Retry-After": str(retry_after)},
+                )
+            return await call_next(request)
+
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(users.router)

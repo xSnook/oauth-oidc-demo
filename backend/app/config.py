@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     azure_admin_tenant_id: str = ""
     admin_emails: str = ""
     log_level: str = "INFO"
+    redis_url: str = ""
+    rate_limit_enabled: bool = True
+    rate_limit_fail_open: bool = True
+    rate_limit_auth_per_minute: int = 10
+    rate_limit_logout_per_minute: int = 30
+    rate_limit_api_per_minute: int = 120
+    rate_limit_admin_write_per_minute: int = 30
 
     @field_validator("session_jwt_secret")
     @classmethod
