@@ -23,6 +23,7 @@ function renderLayout() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<span>dashboard page</span>} />
+          <Route path="/architecture" element={<span>architecture page</span>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -42,6 +43,10 @@ describe('Layout', () => {
     renderLayout();
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Architecture' })).toHaveAttribute(
+      'href',
+      '/architecture',
+    );
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
     expect(screen.getByText('user@example.com')).toBeInTheDocument();
 

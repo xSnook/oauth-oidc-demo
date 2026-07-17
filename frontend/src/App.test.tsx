@@ -64,4 +64,10 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome, Admin User' })).toBeInTheDocument();
   });
+
+  it('renders the architecture page for authenticated users', () => {
+    renderApp('/architecture');
+
+    expect(screen.getByRole('heading', { name: 'How the demo is put together' })).toBeInTheDocument();
+  });
 });
