@@ -11,6 +11,7 @@ export function Layout() {
         <div className="brand-mark">OO</div>
         <nav className="nav-links" aria-label="Primary">
           <NavLink to="/dashboard">Dashboard</NavLink>
+          <NavLink to="/architecture">Architecture</NavLink>
           {user?.role === Role.Owner || user?.role === Role.Admin ? (
             <NavLink to="/admin/users">Users</NavLink>
           ) : null}
