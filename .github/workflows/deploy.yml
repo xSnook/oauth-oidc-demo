@@ -205,6 +205,7 @@ jobs:
 
           docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
           docker compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
           docker compose -f docker-compose.prod.yml restart caddy
 
           for i in $(seq 1 30); do
@@ -212,6 +213,9 @@ jobs:
             sleep 2
             [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
           done
+
+          curl -fsS -D - http://localhost/ -o /dev/null | grep -qi '^Content-Security-Policy:'
+          curl -fsS -D - http://localhost/api/health -o /dev/null | grep -qi '^Content-Security-Policy:'
 
           docker image prune -af --filter "until=72h"
           '''
