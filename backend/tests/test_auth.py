@@ -3,6 +3,12 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.auth import VerifiedIdentity
+from app.auth.jwt import (
+    SESSION_COOKIE_NAME,
+    create_session_token,
+    decode_session_token,
+    remaining_session_ttl_seconds,
+)
 from app.models import User, UserIdentity
 from app.schemas.user import Role
 from tests.conftest import TestingSessionLocal
@@ -156,7 +162,22 @@ def test_me_returns_current_user_with_session(client, monkeypatch):
     assert response.json()["email"] == "user@example.com"
 
 
-def test_logout_clears_cookie(client, monkeypatch):
+def test_session_token_contains_jti_and_token_version():
+    token = create_session_token(user_id=123, token_version=7)
+
+    payload = decode_session_token(token)
+
+    assert payload.user_id == 123
+    assert len(payload.jti) == 32
+    assert payload.token_version == 7
+    assert remaining_session_ttl_seconds(payload) > 0
+
+
+def test_revoked_session_cannot_access_me(client, monkeypatch):
+    async def is_revoked(jti: str) -> bool:
+        return True
+
+    monkeypatch.setattr("app.auth.deps.is_session_jti_revoked", is_revoked)
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
         lambda raw_token: _google_identity(),
@@ -165,11 +186,54 @@ def test_logout_clears_cookie(client, monkeypatch):
         client.post("/api/auth/google", json={"id_token": "token"}).status_code == 200
     )
 
+    response = client.get("/api/auth/me")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "INVALID_SESSION"
+
+
+def test_stale_token_version_cannot_access_me(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.auth.google.verify_id_token",
+        lambda raw_token: _google_identity(),
+    )
+    login = client.post("/api/auth/google", json={"id_token": "token"})
+    assert login.status_code == 200
+
+    with TestingSessionLocal() as db:
+        user = db.scalar(select(User).where(User.email == "user@example.com"))
+        assert user is not None
+        user.token_version += 1
+        db.commit()
+
+    response = client.get("/api/auth/me")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "INVALID_SESSION"
+
+
+def test_logout_revokes_session_jti_and_clears_cookie(client, monkeypatch):
+    revoked: dict[str, int] = {}
+
+    async def revoke(jti: str, ttl_seconds: int) -> None:
+        revoked[jti] = ttl_seconds
+
+    monkeypatch.setattr(
+        "app.auth.google.verify_id_token",
+        lambda raw_token: _google_identity(),
+    )
+    monkeypatch.setattr("app.routers.auth.revoke_session_jti", revoke)
+    login = client.post("/api/auth/google", json={"id_token": "token"})
+    assert login.status_code == 200
+    session = login.cookies[SESSION_COOKIE_NAME]
+    payload = decode_session_token(session)
+
     response = client.post("/api/auth/logout")
 
     assert response.status_code == 204
     assert "session=" in response.headers["set-cookie"]
     assert "Max-Age=0" in response.headers["set-cookie"]
+    assert revoked[payload.jti] > 0
 
 
 def test_microsoft_endpoint_returns_404(client):

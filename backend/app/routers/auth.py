@@ -1,11 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, Request, Response, status
+from jwt import InvalidTokenError
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import google
 from app.auth.deps import get_current_user
-from app.auth.jwt import clear_session_cookie, create_session_token, set_session_cookie
+from app.auth.jwt import (
+    SESSION_COOKIE_NAME,
+    clear_session_cookie,
+    create_session_token,
+    decode_session_token,
+    remaining_session_ttl_seconds,
+    set_session_cookie,
+)
+from app.auth.session_revocation import revoke_session_jti
 from app.auth.service import AccountDisabled, find_or_create_user
 from app.db import get_db
 from app.errors import app_error
@@ -49,7 +59,7 @@ def login_google(
             "This account is disabled",
         ) from exc
 
-    set_session_cookie(response, create_session_token(user.id))
+    set_session_cookie(response, create_session_token(user.id, user.token_version))
     return user_out(user)
 
 
@@ -63,7 +73,18 @@ def login_microsoft() -> None:
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response) -> None:
+async def logout(
+    response: Response,
+    session: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
+) -> None:
+    if session:
+        try:
+            payload = decode_session_token(session)
+            await revoke_session_jti(
+                payload.jti, remaining_session_ttl_seconds(payload)
+            )
+        except (InvalidTokenError, RedisError):
+            pass
     clear_session_cookie(response)
 
 

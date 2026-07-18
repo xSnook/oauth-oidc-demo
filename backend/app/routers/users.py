@@ -79,7 +79,9 @@ def update_user_role(
             "CANNOT_ASSIGN_OWNER",
             "Only owners can assign the owner role",
         )
-    user.role = body.role
+    if user.role != body.role:
+        user.role = body.role
+        user.token_version += 1
     db.commit()
     db.refresh(user)
     return user_out(user)
@@ -101,7 +103,9 @@ def update_user_status(
 
     user = _get_user_or_404(db, user_id)
     _ensure_owner_mutation_allowed(current_user, user)
-    user.is_active = body.is_active
+    if user.is_active != body.is_active:
+        user.is_active = body.is_active
+        user.token_version += 1
     db.commit()
     db.refresh(user)
     return user_out(user)

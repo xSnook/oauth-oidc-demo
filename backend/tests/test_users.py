@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.auth import VerifiedIdentity
+from app.auth.jwt import SESSION_COOKIE_NAME
 from app.models import User
 from app.schemas.user import Role
 from tests.conftest import TestingSessionLocal
@@ -81,6 +82,30 @@ def test_admin_can_update_user_role(client, monkeypatch):
     assert response.json()["role"] == Role.ADMIN
 
 
+def test_admin_role_change_invalidates_user_session(client, monkeypatch):
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+    monkeypatch.setattr(
+        "app.auth.google.verify_id_token",
+        lambda raw_token: _identity("user@example.com", "user-sub"),
+    )
+    user_login = client.post("/api/auth/google", json={"id_token": "token-user-sub"})
+    assert user_login.status_code == 200
+    user = user_login.json()
+    user_session = user_login.cookies[SESSION_COOKIE_NAME]
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+
+    response = client.patch(f"/api/users/{user['id']}/role", json={"role": Role.ADMIN})
+
+    assert response.status_code == 200
+    with TestingSessionLocal() as db:
+        changed_user = db.get(User, user["id"])
+        assert changed_user is not None
+        assert changed_user.token_version == 1
+    client.cookies.set(SESSION_COOKIE_NAME, user_session)
+    stale_response = client.get("/api/auth/me")
+    assert stale_response.status_code == 401
+
+
 def test_owner_can_assign_owner_role(client, monkeypatch):
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
     user = _login(client, monkeypatch, "user@example.com", "user-sub")
@@ -137,6 +162,32 @@ def test_admin_can_update_user_status(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["is_active"] is False
+
+
+def test_admin_status_change_invalidates_user_session(client, monkeypatch):
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+    monkeypatch.setattr(
+        "app.auth.google.verify_id_token",
+        lambda raw_token: _identity("user@example.com", "user-sub"),
+    )
+    user_login = client.post("/api/auth/google", json={"id_token": "token-user-sub"})
+    assert user_login.status_code == 200
+    user = user_login.json()
+    user_session = user_login.cookies[SESSION_COOKIE_NAME]
+    _login(client, monkeypatch, "admin@example.com", "admin-sub")
+
+    response = client.patch(
+        f"/api/users/{user['id']}/status", json={"is_active": False}
+    )
+
+    assert response.status_code == 200
+    with TestingSessionLocal() as db:
+        changed_user = db.get(User, user["id"])
+        assert changed_user is not None
+        assert changed_user.token_version == 1
+    client.cookies.set(SESSION_COOKIE_NAME, user_session)
+    stale_response = client.get("/api/auth/me")
+    assert stale_response.status_code == 401
 
 
 def test_admin_cannot_deactivate_owner(client, monkeypatch):
