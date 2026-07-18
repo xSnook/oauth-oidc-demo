@@ -64,6 +64,9 @@ jobs:
           test "$(alembic heads | wc -l)" -eq 1
           alembic upgrade head
 
+      - name: Test deployment script transport
+        run: python -m unittest discover -s deploy -p "test_*.py"
+
       - name: Test backend
         working-directory: backend
         run: python -m pytest -q
@@ -119,6 +122,7 @@ jobs:
           docker build --target prod \
             --build-arg VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }} \
             --build-arg VITE_AZURE_CLIENT_ID=${{ vars.VITE_AZURE_CLIENT_ID }} \
+            --build-arg APP_GIT_SHA=${{ github.sha }} \
             -t "$REG/app-web:${{ github.sha }}" \
             -t "$REG/app-web:latest" \
             frontend
@@ -203,9 +207,10 @@ jobs:
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
 
-          docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+          # Keep Compose subprocesses detached from SSM command input.
+          docker compose -f docker-compose.prod.yml run --rm -T api alembic upgrade head </dev/null
           docker compose -f docker-compose.prod.yml up -d --force-recreate api web caddy
-          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
+          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile </dev/null
 
           docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q api)" \
             | grep -q ':__GIT_SHA__$'
@@ -221,6 +226,16 @@ jobs:
             [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
           done
 
+          for i in $(seq 1 30); do
+            SERVED_SHA="$(curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/deploy-sha" || true)"
+            [ "${SERVED_SHA}" = "__GIT_SHA__" ] && break
+            sleep 2
+            [ "$i" = "30" ] && {
+              echo "frontend deploy verification failed: expected __GIT_SHA__, got ${SERVED_SHA:-missing}"
+              exit 1
+            }
+          done
+
           curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/dashboard" -o /dev/null \
             | grep -qi '^Content-Security-Policy:'
           curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" -o /dev/null \
@@ -234,14 +249,7 @@ jobs:
           Path("remote-deploy.sh").write_text(script)
           BUILD_REMOTE_DEPLOY
 
-          python3 - <<'BUILD_SSM_COMMANDS'
-          import json
-          from pathlib import Path
-
-          script = Path("remote-deploy.sh").read_text()
-          command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
-          Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
-          BUILD_SSM_COMMANDS
+          python3 deploy/build_ssm_command.py remote-deploy.sh ssm-commands.json
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name AWS-RunShellScript \
