@@ -33,7 +33,7 @@ vi.mock('../api/client', async (importOriginal) => {
 });
 
 function renderLogin(initialEntry: string | { pathname: string; state?: unknown } = '/login') {
-  render(
+  return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -96,16 +96,18 @@ describe('LoginPage', () => {
         },
       },
     };
-    apiMocks.post.mockResolvedValueOnce(adminUser);
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' }).mockResolvedValueOnce(adminUser);
 
     renderLogin({ pathname: '/login', state: { from: '/admin/users' } });
 
     await act(async () => {
       vi.advanceTimersByTime(100);
+      await Promise.resolve();
     });
 
     expect(window.google.accounts.id.initialize).toHaveBeenCalledWith({
       client_id: 'google-client',
+      nonce: 'nonce-123',
       callback: expect.any(Function),
     });
     expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
@@ -120,7 +122,11 @@ describe('LoginPage', () => {
       await callback?.({ credential: 'id-token' });
     });
 
-    expect(apiMocks.post).toHaveBeenCalledWith('/api/auth/google', { id_token: 'id-token' });
+    expect(apiMocks.post).toHaveBeenNthCalledWith(1, '/api/auth/nonce');
+    expect(apiMocks.post).toHaveBeenNthCalledWith(2, '/api/auth/google', {
+      id_token: 'id-token',
+      nonce: 'nonce-123',
+    });
     expect(authState.value.setUser).toHaveBeenCalledWith(adminUser);
     expect(screen.getByText('admin users page')).toBeInTheDocument();
   });
@@ -139,12 +145,16 @@ describe('LoginPage', () => {
         },
       },
     };
-    apiMocks.post.mockResolvedValueOnce(adminUser);
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' }).mockResolvedValueOnce(adminUser);
 
     renderLogin({ pathname: '/login', state: { from: 42 } });
 
     await act(async () => {
       vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
       await callback?.({ credential: 'id-token' });
     });
 
@@ -165,12 +175,18 @@ describe('LoginPage', () => {
         },
       },
     };
-    apiMocks.post.mockRejectedValueOnce(new ApiError(401, 'BAD_TOKEN', 'Bad token.'));
+    apiMocks.post
+      .mockResolvedValueOnce({ nonce: 'nonce-123' })
+      .mockRejectedValueOnce(new ApiError(401, 'BAD_TOKEN', 'Bad token.'));
 
     renderLogin();
 
     await act(async () => {
       vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
       await callback?.({ credential: 'id-token' });
     });
 
@@ -191,14 +207,20 @@ describe('LoginPage', () => {
         },
       },
     };
-    apiMocks.post.mockRejectedValueOnce(
-      new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please retry later.'),
-    );
+    apiMocks.post
+      .mockResolvedValueOnce({ nonce: 'nonce-123' })
+      .mockRejectedValueOnce(
+        new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please retry later.'),
+      );
 
     renderLogin();
 
     await act(async () => {
       vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
       await callback?.({ credential: 'id-token' });
     });
 
@@ -219,16 +241,141 @@ describe('LoginPage', () => {
         },
       },
     };
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' }).mockRejectedValueOnce(new Error('network'));
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await callback?.({ credential: 'id-token' });
+    });
+
+    expect(screen.getByText('Google sign-in failed.')).toBeInTheDocument();
+  });
+
+  it('shows API errors when the OIDC nonce cannot be issued', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockRejectedValueOnce(
+      new ApiError(503, 'NONCE_UNAVAILABLE', 'Google sign-in is temporarily unavailable'),
+    );
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText('Google sign-in is temporarily unavailable'),
+    ).toBeInTheDocument();
+    expect(window.google.accounts.id.initialize).not.toHaveBeenCalled();
+    expect(window.google.accounts.id.renderButton).not.toHaveBeenCalled();
+  });
+
+  it('shows fallback errors when the OIDC nonce request fails unexpectedly', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
     apiMocks.post.mockRejectedValueOnce(new Error('network'));
 
     renderLogin();
 
     await act(async () => {
       vi.advanceTimersByTime(100);
-      await callback?.({ credential: 'id-token' });
+      await Promise.resolve();
     });
 
     expect(screen.getByText('Google sign-in failed.')).toBeInTheDocument();
+    expect(window.google.accounts.id.initialize).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize Google if nonce returns after unmount', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    let resolveNonce: (value: { nonce: string }) => void = () => undefined;
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNonce = resolve;
+      }),
+    );
+
+    const { unmount } = renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    unmount();
+
+    await act(async () => {
+      resolveNonce({ nonce: 'nonce-123' });
+      await Promise.resolve();
+    });
+
+    expect(window.google.accounts.id.initialize).not.toHaveBeenCalled();
+    expect(window.google.accounts.id.renderButton).not.toHaveBeenCalled();
+  });
+
+  it('does not report nonce errors after unmount', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    let rejectNonce: (reason: Error) => void = () => undefined;
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        rejectNonce = reject;
+      }),
+    );
+
+    const { unmount } = renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    unmount();
+
+    await act(async () => {
+      rejectNonce(new Error('network'));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('Google sign-in failed.')).not.toBeInTheDocument();
+    expect(window.google.accounts.id.initialize).not.toHaveBeenCalled();
   });
 
   it('reports when Google never loads', async () => {

@@ -15,12 +15,13 @@ from app.auth.jwt import (
     remaining_session_ttl_seconds,
     set_session_cookie,
 )
+from app.auth.oidc_nonce import OidcNonceError, consume_oidc_nonce, issue_oidc_nonce
 from app.auth.session_revocation import revoke_session_jti
 from app.auth.service import AccountDisabled, find_or_create_user
 from app.db import get_db
 from app.errors import app_error
 from app.models import User
-from app.schemas.auth import TokenLoginRequest
+from app.schemas.auth import NonceResponse, TokenLoginRequest
 from app.schemas.user import UserOut
 from app.serializers import user_out
 
@@ -38,15 +39,16 @@ def require_json(request: Request) -> None:
 
 
 @router.post("/google", response_model=UserOut, dependencies=[Depends(require_json)])
-def login_google(
+async def login_google(
     response: Response,
     body: TokenLoginRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
     try:
-        ident = google.verify_id_token(body.id_token)
+        ident = google.verify_id_token(body.id_token, body.nonce)
+        await consume_oidc_nonce(body.nonce)
         user = find_or_create_user(db, ident)
-    except google.ProviderTokenError as exc:
+    except (google.ProviderTokenError, OidcNonceError) as exc:
         raise app_error(
             status.HTTP_401_UNAUTHORIZED,
             "INVALID_TOKEN",
@@ -61,6 +63,18 @@ def login_google(
 
     set_session_cookie(response, create_session_token(user.id, user.token_version))
     return user_out(user)
+
+
+@router.post("/nonce", response_model=NonceResponse)
+async def nonce() -> NonceResponse:
+    try:
+        return NonceResponse(nonce=await issue_oidc_nonce())
+    except OidcNonceError as exc:
+        raise app_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "NONCE_UNAVAILABLE",
+            "Google sign-in is temporarily unavailable",
+        ) from exc
 
 
 @router.post("/microsoft")

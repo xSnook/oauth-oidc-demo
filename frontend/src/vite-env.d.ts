@@ -16,6 +16,7 @@ interface GoogleCredentialResponse {
 interface GoogleAccountsId {
   initialize(options: {
     client_id: string;
+    nonce: string;
     callback: (response: GoogleCredentialResponse) => void;
   }): void;
   renderButton(
