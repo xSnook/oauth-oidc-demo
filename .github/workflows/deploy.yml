@@ -119,6 +119,7 @@ jobs:
           docker build --target prod \
             --build-arg VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }} \
             --build-arg VITE_AZURE_CLIENT_ID=${{ vars.VITE_AZURE_CLIENT_ID }} \
+            --build-arg APP_GIT_SHA=${{ github.sha }} \
             -t "$REG/app-web:${{ github.sha }}" \
             -t "$REG/app-web:latest" \
             frontend
@@ -203,7 +204,9 @@ jobs:
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
 
-          docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+          # The SSM shell is reading this script from stdin, so the one-off container
+          # must not consume the deploy commands that follow the migration.
+          docker compose -f docker-compose.prod.yml run --rm -T api alembic upgrade head </dev/null
           docker compose -f docker-compose.prod.yml up -d --force-recreate api web caddy
           docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
 
@@ -219,6 +222,16 @@ jobs:
             curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" && break
             sleep 2
             [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
+          done
+
+          for i in $(seq 1 30); do
+            SERVED_SHA="$(curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/deploy-sha" || true)"
+            [ "${SERVED_SHA}" = "__GIT_SHA__" ] && break
+            sleep 2
+            [ "$i" = "30" ] && {
+              echo "frontend deploy verification failed: expected __GIT_SHA__, got ${SERVED_SHA:-missing}"
+              exit 1
+            }
           done
 
           curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/dashboard" -o /dev/null \
