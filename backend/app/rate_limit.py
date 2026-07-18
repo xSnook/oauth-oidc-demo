@@ -1,3 +1,4 @@
+from ipaddress import ip_address, ip_network
 import logging
 import time
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from fastapi import Request
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from app.config import Settings
+from app.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +126,46 @@ class RedisRateLimiter:
 
 
 def _client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",", 1)[0].strip()
-        return client_ip or None
     if request.client:
-        return request.client.host
-    return None
+        peer_ip = request.client.host
+    else:
+        return None
+
+    trusted_proxies = _trusted_proxy_networks(settings.trusted_proxy_cidrs)
+    if not trusted_proxies or not _ip_in_networks(peer_ip, trusted_proxies):
+        return peer_ip
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    forwarded_ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+    for forwarded_ip in reversed(forwarded_ips):
+        parsed_forwarded_ip = _parse_ip(forwarded_ip)
+        if parsed_forwarded_ip is not None and not _ip_in_networks(
+            parsed_forwarded_ip, trusted_proxies
+        ):
+            return forwarded_ip
+
+    return peer_ip
+
+
+def _trusted_proxy_networks(cidrs: list[str]):
+    networks = []
+    for cidr in cidrs:
+        try:
+            networks.append(ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid trusted proxy CIDR: %s", cidr)
+    return tuple(networks)
+
+
+def _parse_ip(ip: str):
+    try:
+        return ip_address(ip)
+    except ValueError:
+        return None
+
+
+def _ip_in_networks(ip, networks) -> bool:
+    parsed_ip = _parse_ip(ip) if isinstance(ip, str) else ip
+    if parsed_ip is None:
+        return False
+    return any(parsed_ip in network for network in networks)

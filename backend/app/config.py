@@ -1,7 +1,7 @@
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     rate_limit_logout_per_minute: int = 30
     rate_limit_api_per_minute: int = 120
     rate_limit_admin_write_per_minute: int = 30
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = []
 
     @field_validator("session_jwt_secret")
     @classmethod
@@ -35,6 +36,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SESSION_JWT_SECRET must be >=32 chars and not the placeholder"
             )
+        return v
+
+    @field_validator("trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def parse_trusted_proxy_cidrs(cls, v: Any) -> list[str]:
+        if v is None or v == "":
+            return []
+        if isinstance(v, str):
+            return [cidr.strip() for cidr in v.split(",") if cidr.strip()]
         return v
 
     @property
