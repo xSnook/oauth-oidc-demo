@@ -144,7 +144,7 @@ jobs:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          python3 - <<'PY'
+          python3 - <<'BUILD_REMOTE_DEPLOY'
           import os
           from pathlib import Path
 
@@ -219,16 +219,16 @@ jobs:
           script = script.replace("__DEPLOY_FILES__", deploy_files)
           script = script.replace("__GIT_SHA__", os.environ["GIT_SHA"])
           Path("remote-deploy.sh").write_text(script)
-          PY
+          BUILD_REMOTE_DEPLOY
 
-          python3 - <<'PY'
+          python3 - <<'BUILD_SSM_COMMANDS'
           import json
           from pathlib import Path
 
           script = Path("remote-deploy.sh").read_text()
           command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
           Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
-          PY
+          BUILD_SSM_COMMANDS
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name AWS-RunShellScript \
