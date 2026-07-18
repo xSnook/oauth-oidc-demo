@@ -161,6 +161,7 @@ jobs:
 
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
+          docker logout "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)" || true
 
           docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
           docker compose -f docker-compose.prod.yml up -d

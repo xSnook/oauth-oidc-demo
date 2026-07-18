@@ -35,8 +35,8 @@ An internal web app with exactly these capabilities and nothing more:
 | Auth | Google Identity Services + MSAL.js in the browser → backend verifies ID tokens → app-issued session JWT in an HttpOnly cookie |
 | Local dev | docker-compose: `mysql`, `api` (port 8000), `web` (Vite, port 5173, proxies `/api`) |
 | Prod | one EC2 t3.small (Ubuntu 24.04, docker compose), Caddy for TLS (Let's Encrypt), nginx serving the SPA, RDS MySQL, ECR, Route 53 |
-| CI/CD | GitHub Actions: test → build/push to ECR → deploy over SSH (temporary security-group opening) |
-| Node/Python in CI | Node 20, Python 3.12 |
+| CI/CD | GitHub Actions: test → build/push to ECR → deploy through AWS SSM Run Command |
+| Node/Python in CI | Node 24.18.0, Python 3.12 |
 
 **Same-origin everywhere; no CORS middleware anywhere.** Locally the Vite proxy makes
 `/api` same-origin; in prod Caddy serves SPA + API on one domain.
@@ -874,13 +874,12 @@ Design notes baked into the YAML below:
 - **OIDC federation** to AWS (`id-token: write`) — no long-lived AWS keys in GitHub.
 - Client IDs are GitHub **repository variables** (public identifiers): the web image build
   needs `--build-arg` values or both login buttons ship dead.
-- **Deploy over SSH with a temporary security-group opening**: the SG keeps port 22 closed
-  by default; the job authorizes the runner's IP for the duration and always revokes it.
-  (GitHub runners' IPs vary — a fixed office-IP rule would hang the deploy.)
-- Deploy syncs `deploy/` to `/opt/app/` every run (repo stays the source of truth),
-  records the previous image tag **from the running container** (so a failed deploy can't
-  poison the rollback pointer), migrates **before** the swap, and smoke-tests
-  `/api/health` before declaring success.
+- **Deploy through AWS SSM Run Command**: no long-lived SSH key in GitHub and no port 22
+  security-group opening from GitHub runners.
+- Deploy runs the existing `/opt/app` remote flow, records the previous image tag **from
+  the running container** (so a failed deploy can't poison the rollback pointer), pulls the
+  new images, logs out of ECR, migrates **before** the swap, and smoke-tests `/api/health`
+  before declaring success.
 - `concurrency` serializes deploys.
 
 ```yaml
@@ -932,7 +931,7 @@ jobs:
           alembic upgrade head
       - run: pytest backend/tests
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: frontend/package-lock.json }
+        with: { node-version: 24.18.0, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
         working-directory: frontend
       - run: npm run lint
@@ -975,70 +974,62 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Open SSH from this runner only
-        run: |
-          RUNNER_IP=$(curl -fsS https://checkip.amazonaws.com)
-          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
-          aws ec2 authorize-security-group-ingress \
-            --group-id ${{ secrets.EC2_SG_ID }} \
-            --protocol tcp --port 22 --cidr "$RUNNER_IP/32"
-      - name: Sync deploy files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          source: "deploy/*"
-          target: /opt/app/
-          strip_components: 1
-      - name: Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          script_stop: true
-          envs: GIT_SHA
-          script: |
-            set -euo pipefail
-            cd /opt/app
-            chmod +x fetch-env.sh
-
-            aws ecr get-login-password --region us-east-1 \
-              | docker login --username AWS --password-stdin \
-                "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
-
-            ./fetch-env.sh
-
-            # Rollback pointer from what is ACTUALLY running (not from .env)
-            RUNNING=$(docker inspect --format '{{.Config.Image}}' \
-              $(docker compose -f docker-compose.prod.yml ps -q api) 2>/dev/null | cut -d: -f2 || true)
-            [ -n "$RUNNING" ] && echo "$RUNNING" > .previous_tag
-
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${GIT_SHA}/" .env
-            docker compose -f docker-compose.prod.yml pull
-
-            # Migrations BEFORE the swap, using the new image (migrations must stay additive)
-            docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
-
-            docker compose -f docker-compose.prod.yml up -d
-
-            # Smoke test — fail the deploy if the API never comes healthy
-            for i in $(seq 1 30); do
-              curl -fsS http://localhost/api/health && break
-              sleep 2
-              [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
-            done
-
-            docker image prune -af --filter "until=72h"
+      - name: Deploy through SSM
         env:
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           GIT_SHA: ${{ github.sha }}
-      - name: Close SSH
-        if: always()
         run: |
-          aws ec2 revoke-security-group-ingress \
-            --group-id ${{ secrets.EC2_SG_ID }} \
-            --protocol tcp --port 22 --cidr "$RUNNER_IP/32" || true
+          cat > remote-deploy.sh <<'SCRIPT'
+          set -euo pipefail
+          cd /opt/app
+          chmod +x fetch-env.sh
+
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin \
+              "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
+
+          ./fetch-env.sh
+
+          RUNNING=$(docker inspect --format '{{.Config.Image}}' \
+            $(docker compose -f docker-compose.prod.yml ps -q api) 2>/dev/null | cut -d: -f2 || true)
+          [ -n "$RUNNING" ] && echo "$RUNNING" > .previous_tag
+
+          sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
+          docker compose -f docker-compose.prod.yml pull
+          docker logout "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)" || true
+
+          docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+          docker compose -f docker-compose.prod.yml up -d
+
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost/api/health && break
+            sleep 2
+            [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
+          done
+
+          docker image prune -af --filter "until=72h"
+          SCRIPT
+          sed -i "s/__GIT_SHA__/${GIT_SHA}/g" remote-deploy.sh
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          script = Path("remote-deploy.sh").read_text()
+          command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
+          Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
+          PY
+
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets "Key=instanceids,Values=${EC2_INSTANCE_ID}" \
+            --parameters file://ssm-commands.json \
+            --query "Command.CommandId" \
+            --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${EC2_INSTANCE_ID}"
 ```
 
 **GitHub configuration** (exact list; setup steps in `SETUP.md`):
@@ -1047,16 +1038,14 @@ jobs:
 |---|---|---|
 | secret | `AWS_ACCOUNT_ID` | 12-digit account id |
 | secret | `AWS_ROLE_ARN` | `arn:aws:iam::<id>:role/app-github-deploy` |
-| secret | `EC2_HOST` | Elastic IP |
-| secret | `EC2_SSH_PRIVATE_KEY` | PEM contents of `app-deploy-key` |
-| secret | `EC2_SG_ID` | `sg-...` of `app-ec2-sg` |
+| secret | `EC2_INSTANCE_ID` | EC2 instance id for SSM Run Command deploys |
 | variable | `VITE_GOOGLE_CLIENT_ID` | Google OAuth client id |
 | variable | `VITE_AZURE_CLIENT_ID` | Azure app (client) id |
 
 True secrets (DB URL, JWT secret) never enter GitHub — they live only in SSM and are
 pulled on the box.
 
-**Rollback:** `ssh` to the box (or SSM Session Manager) →
+**Rollback:** use SSM Session Manager →
 `cd /opt/app && sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(cat .previous_tag)/" .env &&
 docker compose -f docker-compose.prod.yml up -d`. Schema is never auto-downgraded; because
 migrations are additive, old code runs on new schema. Only `alembic downgrade -1` manually
@@ -1068,7 +1057,7 @@ Region `us-east-1`. Default VPC + two added private subnets (no IGW route) for R
 
 | Resource | Name | Key settings |
 |---|---|---|
-| SG (EC2) | `app-ec2-sg` | in: 80/443 from world; **no standing port-22 rule** (deploys open it temporarily; humans use SSM Session Manager) |
+| SG (EC2) | `app-ec2-sg` | in: 80/443 from world; **no port-22 rule**; deploys and humans use SSM |
 | SG (RDS) | `app-rds-sg` | in: 3306 from `app-ec2-sg` (SG reference, not CIDR) |
 | RDS | `app-prod-mysql` | MySQL 8.0, `db.t4g.micro`, 20GB gp3, single-AZ, **Public access: No**, custom parameter group (`character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci`), backups 7d, deletion protection on |
 | ECR | `app-api`, `app-web` | scan on push; lifecycle: keep last 10 images |

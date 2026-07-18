@@ -91,13 +91,14 @@ $env:M7_APP_DB_PASSWORD = "<strong-app-db-password>"
 .\infra\m7\provision.ps1 -Apply
 ```
 
-The script prints the values needed for GitHub:
+The script prints these GitHub values:
 
 - `AWS_ACCOUNT_ID`
 - `AWS_ROLE_ARN`
-- `EC2_SG_ID`
 - `VITE_GOOGLE_CLIENT_ID`
 - `VITE_AZURE_CLIENT_ID`
+
+Copy `EC2_INSTANCE_ID` from the launched EC2 instance after the interactive EC2 step below.
 
 The remaining M7 work is still interactive because it depends on final human choices:
 
@@ -124,9 +125,7 @@ Secrets:
 |---|---|
 | `AWS_ACCOUNT_ID` | 12-digit AWS account ID |
 | `AWS_ROLE_ARN` | `arn:aws:iam::<id>:role/app-github-deploy` |
-| `EC2_HOST` | Elastic IP |
-| `EC2_SSH_PRIVATE_KEY` | Full `app-deploy-key.pem` contents |
-| `EC2_SG_ID` | `app-ec2-sg` security group ID |
+| `EC2_INSTANCE_ID` | EC2 instance id used by SSM Run Command deploys |
 
 Variables:
 

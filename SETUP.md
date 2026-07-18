@@ -207,9 +207,7 @@ Create exactly these (matches `PLAN.md` §13; values from section 4 of this file
 |---|---|---|
 | `AWS_ACCOUNT_ID` | Secret | 12-digit account ID |
 | `AWS_ROLE_ARN` | Secret | `arn:aws:iam::<id>:role/app-github-deploy` |
-| `EC2_HOST` | Secret | the Elastic IP |
-| `EC2_SSH_PRIVATE_KEY` | Secret | full contents of `app-deploy-key.pem`, incl. BEGIN/END lines |
-| `EC2_SG_ID` | Secret | `sg-...` of `app-ec2-sg` (the deploy job opens/closes port 22 with it) |
+| `EC2_INSTANCE_ID` | Secret | EC2 instance id, for SSM Run Command deploys |
 | `VITE_GOOGLE_CLIENT_ID` | **Variable** | Google client ID (public identifier) |
 | `VITE_AZURE_CLIENT_ID` | **Variable** | Entra application (client) ID |
 
@@ -283,7 +281,7 @@ account ID, deploy role ARN, EC2 instance ID + SG ID, Elastic IP, RDS endpoint, 
    The `sub` condition is the security boundary — only `main` of your repo can assume it.
 
 3. Inline permissions policy `app-github-deploy-policy` (replace `<ACCOUNT_ID>`; fill
-   `<SG_ID>` after step 4.5):
+   `<INSTANCE_ID>` after step 4.5):
 
 ```json
 {
@@ -297,11 +295,14 @@ account ID, deploy role ARN, EC2 instance ID + SG ID, Elastic IP, RDS endpoint, 
                  "ecr:UploadLayerPart","ecr:CompleteLayerUpload"],
       "Resource": ["arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/app-api",
                    "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/app-web"] },
-    { "Sid": "TemporarySshWindow", "Effect": "Allow",
-      "Action": ["ec2:AuthorizeSecurityGroupIngress","ec2:RevokeSecurityGroupIngress"],
-      "Resource": "arn:aws:ec2:us-east-1:<ACCOUNT_ID>:security-group/<SG_ID>" },
-    { "Sid": "DescribeSgs", "Effect": "Allow",
-      "Action": "ec2:DescribeSecurityGroups", "Resource": "*" }
+    { "Sid": "RunDeployCommand", "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript",
+        "arn:aws:ec2:us-east-1:<ACCOUNT_ID>:instance/<INSTANCE_ID>"
+      ] },
+    { "Sid": "ReadDeployCommandResult", "Effect": "Allow",
+      "Action": "ssm:GetCommandInvocation", "Resource": "*" }
   ]
 }
 ```
@@ -343,12 +344,12 @@ enable scan-on-push). On each: Lifecycle policy → "expire when image count exc
 
 1. EC2 → Launch instance. Name `app-server`. AMI **Ubuntu Server 24.04 LTS, 64-bit x86**
    (not Arm — CI builds amd64 images). Type **t3.small**. Storage **30 GiB gp3**.
-2. **Key pair**: create **`app-deploy-key`**, download the `.pem` → GitHub secret
-   `EC2_SSH_PRIVATE_KEY`. (The pipeline SSHes through a temporary SG opening; you'll use
-   Session Manager for interactive work.)
+2. **Key pair**: proceed without an SSH key pair if you are comfortable using Session
+   Manager for all interactive access. If you create a break-glass key, do not store it in
+   GitHub.
 3. Network: default VPC, auto-assign public IP **Enable**. Create SG **`app-ec2-sg`** with
-   **only** HTTP 80 and HTTPS 443 from Anywhere. **No port 22 rule** — the deploy job adds
-   and removes one scoped to the runner's IP each run.
+   **only** HTTP 80 and HTTPS 443 from Anywhere. **No port 22 rule** — deploys and
+   interactive access use SSM, not SSH.
 4. Advanced details → IAM instance profile **`app-ec2-role`**; paste this **User data**
    (installs Docker + compose, AWS CLI v2 via the official zip — *not* snap, which breaks
    under cloud-init and puts `aws` off the default PATH — a MySQL client for the one-time
@@ -375,13 +376,13 @@ curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/aw
 unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
 ```
 
-5. Launch. Note the **Instance ID** and the SG's **`sg-...` id** (→ GitHub secret `EC2_SG_ID`;
-   also paste into the deploy role policy from 4.2.3).
+5. Launch. Note the **Instance ID** (→ GitHub secret `EC2_INSTANCE_ID`; also paste into
+   the deploy role policy from 4.2.3).
 6. **Verify SSM**: wait ~3 min → instance → Connect → **Session Manager** → Connect →
    `docker --version`, `docker compose version`, `aws --version`. If Session Manager says
    unavailable, the instance profile is usually missing (Actions → Security → Modify IAM role).
 7. **Elastic IP**: EC2 → Elastic IPs → Allocate → Associate with `app-server`. Note it
-   (→ GitHub secret `EC2_HOST`; DNS A record later).
+   for the DNS A record later.
 8. **Bootstrap `/opt/app/.env`** (compose interpolation values the deploy job updates):
    in a Session Manager shell:
    ```bash
@@ -494,7 +495,7 @@ and update `DOMAIN=` in `/opt/app/.env`.
 - [ ] `app-server` running: role `app-ec2-role`, SG `app-ec2-sg` (80/443 only, **no 22**), Docker + compose + AWS CLI verified via Session Manager, Elastic IP attached, `/opt/app/.env` bootstrapped
 - [ ] `app-prod-mysql` Available: Public access No, SG `app-rds-sg` ← `app-ec2-sg`, initial DB `appdb`, param group `app-mysql8`, backups 7d; `appuser` created; port test says OK
 - [ ] All nine `/app/prod/*` params exist; instance `get-parameters-by-path` works
-- [ ] GitHub: 5 secrets + 2 variables set (section 3.3)
+- [ ] GitHub: 3 secrets + 2 variables set (section 3.3)
 - [ ] Domain resolves to the Elastic IP; Google origins + Entra redirect URIs updated
 - [ ] Push to `main` → watch Actions: test → build-push → deploy → smoke test green →
       `https://<domain>` shows the sign-in page, and your `ADMIN_EMAILS` account lands on
