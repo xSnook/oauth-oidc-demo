@@ -984,9 +984,28 @@ jobs:
           cd /opt/app
           chmod +x fetch-env.sh
 
-          aws ecr get-login-password --region us-east-1 \
-            | docker login --username AWS --password-stdin \
-              "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
+          if ! command -v docker-credential-ecr-login >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y amazon-ecr-credential-helper
+          fi
+
+          ECR_REGISTRY="$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
+          mkdir -p /root/.docker
+          python3 - "$ECR_REGISTRY" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          registry = sys.argv[1]
+          config_path = Path("/root/.docker/config.json")
+          if config_path.exists():
+              config = json.loads(config_path.read_text() or "{}")
+          else:
+              config = {}
+          config.setdefault("credHelpers", {})[registry] = "ecr-login"
+          config.pop("auths", None)
+          config_path.write_text(json.dumps(config))
+          PY
 
           ./fetch-env.sh
 
@@ -996,7 +1015,6 @@ jobs:
 
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
-          docker logout "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)" || true
 
           docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
           docker compose -f docker-compose.prod.yml up -d

@@ -360,7 +360,7 @@ enable scan-on-push). On each: Lifecycle policy → "expire when image count exc
 set -euo pipefail
 mkdir -p /opt/app && chown ubuntu:ubuntu /opt/app
 apt-get update -y
-apt-get install -y ca-certificates curl unzip mysql-client-core-8.0
+apt-get install -y ca-certificates curl unzip mysql-client-core-8.0 amazon-ecr-credential-helper
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<'EOF'
 {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}
