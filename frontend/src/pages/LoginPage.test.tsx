@@ -53,12 +53,17 @@ describe('LoginPage', () => {
     };
     apiMocks.post.mockReset();
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', '');
+    document.documentElement.removeAttribute('data-theme');
+    window.localStorage.clear();
     Reflect.deleteProperty(window, 'google');
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    document.documentElement.removeAttribute('data-theme');
+    window.localStorage.clear();
     Reflect.deleteProperty(window, 'google');
   });
 
@@ -79,7 +84,7 @@ describe('LoginPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.getByText('GOOGLE_CLIENT_ID', { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Microsoft sign-in unavailable' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Microsoft sign-in unavailable' })).not.toBeInTheDocument();
   });
 
   it('initializes Google sign-in and navigates to the requested page', async () => {
@@ -113,8 +118,9 @@ describe('LoginPage', () => {
     expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
       theme: 'outline',
       size: 'large',
-      width: 380,
-      text: 'signin_with',
+      width: 344,
+      text: 'continue_with',
+      shape: 'pill',
     });
     expect(screen.getByLabelText('Google sign-in loaded')).toBeInTheDocument();
 
@@ -129,6 +135,104 @@ describe('LoginPage', () => {
     });
     expect(authState.value.setUser).toHaveBeenCalledWith(adminUser);
     expect(screen.getByText('admin users page')).toBeInTheDocument();
+  });
+
+  it('uses the blue pill Google button variant in dark theme', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    document.documentElement.dataset.theme = 'dark';
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' });
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
+      theme: 'filled_blue',
+      size: 'large',
+      width: 344,
+      text: 'continue_with',
+      shape: 'pill',
+    });
+  });
+
+  it('uses the outline Google button variant in light theme', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    document.documentElement.dataset.theme = 'light';
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' });
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
+      theme: 'outline',
+      size: 'large',
+      width: 344,
+      text: 'continue_with',
+      shape: 'pill',
+    });
+  });
+
+  it('uses the blue Google button when system theme prefers dark', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'google-client');
+    window.localStorage.setItem('oauth-oidc-demo-theme', 'system');
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+        },
+      },
+    };
+    apiMocks.post.mockResolvedValueOnce({ nonce: 'nonce-123' });
+
+    renderLogin();
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+    });
+
+    expect(window.google.accounts.id.renderButton).toHaveBeenCalledWith(expect.any(HTMLElement), {
+      theme: 'filled_blue',
+      size: 'large',
+      width: 344,
+      text: 'continue_with',
+      shape: 'pill',
+    });
   });
 
   it('falls back to dashboard when login state has no return path', async () => {
