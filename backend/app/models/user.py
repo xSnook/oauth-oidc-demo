@@ -26,6 +26,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="user")
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("1")
     )
