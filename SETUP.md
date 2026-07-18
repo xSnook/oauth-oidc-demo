@@ -49,8 +49,12 @@ The app runs inside Linux containers — Windows just hosts Docker, Git, and you
 
 1. Node LTS `.msi` from `https://nodejs.org` (plain installer; nvm unnecessary for one version).
 2. Python 3.12 from `https://www.python.org/downloads/` — **check "Add python.exe to PATH"**.
-3. Optional IDE-IntelliSense niceties after cloning: `npm install` in `frontend\`, and a
-   `.venv` with `pip install -r requirements.txt` in `backend\`. Nothing breaks without them.
+3. Optional IDE-IntelliSense niceties after cloning: `npm ci` in `frontend\`. Backend
+   Python dependencies are installed in Linux containers from the committed hashed locks.
+   If you want a native Windows `.venv`, generate a local platform lock in `backend\` with
+   `python -m piptools compile --generate-hashes --output-file requirements-dev.windows.lock requirements-dev.in`,
+   then install it with `pip install --require-hashes -r requirements-dev.windows.lock`.
+   Do not commit the Windows-only lock. Nothing breaks without these editor niceties.
 
 ### 1.5 VS Code + extensions
 

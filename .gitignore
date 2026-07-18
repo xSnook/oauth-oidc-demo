@@ -9,5 +9,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+backend/requirements-dev.windows.lock
 .vite/
 coverage/
