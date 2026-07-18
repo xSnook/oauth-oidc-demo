@@ -380,7 +380,11 @@ $dbParamGroup = Ensure-RdsParameterGroup
 Write-Output "DB parameter group: $dbParamGroup"
 
 Write-Step "Runtime SSM parameters"
-$sessionSecret = -join ((1..64) | ForEach-Object { "{0:x}" -f (Get-Random -Minimum 0 -Maximum 16) })
+$bytes = [byte[]]::new(32)
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$sessionSecret = -join ($bytes | ForEach-Object { $_.ToString('x2') })
 $appDbPassword = [Environment]::GetEnvironmentVariable("M7_APP_DB_PASSWORD")
 if ($appDbPassword -and $config.domain -and $config.googleClientId) {
     $databaseUrl = "mysql+pymysql://appuser:${appDbPassword}@<RDS_ENDPOINT>:3306/appdb?charset=utf8mb4"
