@@ -772,7 +772,7 @@ ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
     VITE_AZURE_CLIENT_ID=$VITE_AZURE_CLIENT_ID
 RUN npm run build
 
-FROM nginx:alpine AS prod
+FROM nginxinc/nginx-unprivileged:alpine AS prod
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 ```
@@ -781,7 +781,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 ```nginx
 server {
-  listen 80;
+  listen 8080;
   root /usr/share/nginx/html;
   location / { try_files $uri /index.html; }
 }
@@ -824,7 +824,7 @@ services:
   web:
     image: ${ECR_REGISTRY}/app-web:${IMAGE_TAG}
     restart: unless-stopped
-    expose: ["80"]
+    expose: ["8080"]
 
 volumes:
   caddy_data:
@@ -841,7 +841,7 @@ once DNS resolves (ACM certs **cannot** be installed on bare EC2 — do not crea
 		reverse_proxy api:8000
 	}
 	handle {
-		reverse_proxy web:80
+		reverse_proxy web:8080
 	}
 }
 ```

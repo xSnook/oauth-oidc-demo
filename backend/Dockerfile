@@ -16,5 +16,9 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 
 FROM base AS prod
 COPY . .
+RUN addgroup --gid 10001 appuser \
+    && adduser --disabled-password --gecos "" --uid 10001 --ingroup appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
