@@ -443,6 +443,7 @@ aws ssm put-parameter --name /app/prod/GOOGLE_CLIENT_ID --type String --value '<
 aws ssm put-parameter --name /app/prod/AZURE_CLIENT_ID --type String --value '<application-client-id-guid>'
 aws ssm put-parameter --name /app/prod/AZURE_ADMIN_TENANT_ID --type String --value '<directory-tenant-id-guid>'
 aws ssm put-parameter --name /app/prod/ADMIN_EMAILS --type String --value '<your-sign-in-email>'
+aws ssm put-parameter --name /app/prod/TRUSTED_PROXY_CIDRS --type String --value '172.16.0.0/12'
 ```
 
 (Update later with `--overwrite`. Comma-separate additional admin emails, no spaces.)
@@ -455,7 +456,7 @@ API the deploy uses:
 aws ssm get-parameters-by-path --path /app/prod --with-decryption --region us-east-1 --query 'Parameters[].Name'
 ```
 
-All nine names should print. AccessDenied here = the 4.4.2 policy is missing the
+All ten names should print. AccessDenied here = the 4.4.2 policy is missing the
 no-trailing-slash path ARN.
 
 ---
@@ -494,7 +495,7 @@ and update `DOMAIN=` in `/opt/app/.env`.
 - [ ] ECR `app-api` + `app-web` exist (lifecycle: keep 10)
 - [ ] `app-server` running: role `app-ec2-role`, SG `app-ec2-sg` (80/443 only, **no 22**), Docker + compose + AWS CLI verified via Session Manager, Elastic IP attached, `/opt/app/.env` bootstrapped
 - [ ] `app-prod-mysql` Available: Public access No, SG `app-rds-sg` ← `app-ec2-sg`, initial DB `appdb`, param group `app-mysql8`, backups 7d; `appuser` created; port test says OK
-- [ ] All nine `/app/prod/*` params exist; instance `get-parameters-by-path` works
+- [ ] All ten `/app/prod/*` params exist; instance `get-parameters-by-path` works
 - [ ] GitHub: 3 secrets + 2 variables set (section 3.3)
 - [ ] Domain resolves to the Elastic IP; Google origins + Entra redirect URIs updated
 - [ ] Push to `main` → watch Actions: test → build-push → deploy → smoke test green →

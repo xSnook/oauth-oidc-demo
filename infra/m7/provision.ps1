@@ -397,6 +397,7 @@ if ($appDbPassword -and $config.domain -and $config.googleClientId) {
     Invoke-Aws @("ssm", "put-parameter", "--name", "/app/prod/AZURE_CLIENT_ID", "--type", "String", "--value", $config.azureClientId, "--overwrite", "--region", $region)
     Invoke-Aws @("ssm", "put-parameter", "--name", "/app/prod/AZURE_ADMIN_TENANT_ID", "--type", "String", "--value", $config.azureAdminTenantId, "--overwrite", "--region", $region)
     Invoke-Aws @("ssm", "put-parameter", "--name", "/app/prod/ADMIN_EMAILS", "--type", "String", "--value", $config.adminEmails, "--overwrite", "--region", $region)
+    Invoke-Aws @("ssm", "put-parameter", "--name", "/app/prod/TRUSTED_PROXY_CIDRS", "--type", "String", "--value", "172.16.0.0/12", "--overwrite", "--region", $region)
 } else {
     Write-Output "Skipping SSM app parameters. Set M7_APP_DB_PASSWORD and fill domain/googleClientId before applying."
 }

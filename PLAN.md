@@ -189,6 +189,7 @@ every other file (`.env.example`, compose, SSM, CI) uses exactly these names:
 | `AZURE_ADMIN_TENANT_ID` | empty | your tenant GUID (SSM) | empty = Microsoft logins never auto-promote |
 | `ADMIN_EMAILS` | your email | (SSM) | comma-separated, compared lowercase |
 | `LOG_LEVEL` | `INFO` | `INFO` | |
+| `TRUSTED_PROXY_CIDRS` | empty | `172.16.0.0/12` (SSM) | trusts Caddy/Docker proxy peers for `X-Forwarded-For` |
 
 ```python
 from typing import Literal
@@ -862,7 +863,8 @@ chmod 600 /opt/app/api.env
 SSM parameters (all under `/app/prod/`; names match §5 exactly):
 `DATABASE_URL` (SecureString), `SESSION_JWT_SECRET` (SecureString), `APP_ENV`=`production`,
 `DB_REQUIRE_TLS`=`true`, `COOKIE_SECURE`=`true`, `GOOGLE_CLIENT_ID`, `AZURE_CLIENT_ID`,
-`AZURE_ADMIN_TENANT_ID`, `ADMIN_EMAILS`. (Creation commands are in `SETUP.md`.)
+`AZURE_ADMIN_TENANT_ID`, `ADMIN_EMAILS`, `TRUSTED_PROXY_CIDRS`. (Creation commands are in
+`SETUP.md`.)
 
 ## 13. CI/CD pipeline — `.github/workflows/deploy.yml`
 
