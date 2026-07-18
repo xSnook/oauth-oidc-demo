@@ -17,18 +17,20 @@ const stackSections = [
 ];
 
 const authFlow = [
-  'Google issues an OIDC ID token in the browser.',
-  'FastAPI verifies the token against Google public keys.',
+  'FastAPI issues a short-lived Redis nonce before Google sign-in is initialized.',
+  'Google issues an OIDC ID token bound to that nonce in the browser.',
+  'FastAPI verifies the token against Google public keys and consumes the nonce once.',
   'The backend creates or finds the local user record.',
   'A signed HTTP-only session cookie keeps the browser authenticated.',
   'Role checks gate owner, admin, and user-only behavior.',
 ];
 
 const securityNotes = [
-  'Google ID tokens are verified server-side before a local session is created.',
+  'Google ID tokens are verified server-side and bound to single-use Redis nonces before a local session is created.',
   'RDS is private and only reachable from the application host security group.',
   'Redis-backed limits throttle abusive auth and API request patterns.',
-  'Owner accounts are protected from non-owner role and status changes.',
+  'Owner accounts and admin account mutations are protected from non-owner role and status changes.',
+  'Admins cannot promote users to admin or change another admin account.',
   'Production secrets live in AWS SSM Parameter Store instead of GitHub Actions.',
 ];
 

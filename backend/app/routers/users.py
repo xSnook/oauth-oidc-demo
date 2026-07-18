@@ -42,6 +42,19 @@ def _ensure_owner_mutation_allowed(current_user: User, target_user: User) -> Non
         )
 
 
+def _ensure_admin_mutation_allowed(
+    current_user: User, target_user: User, requested_role: Role | None = None
+) -> None:
+    if _is_owner(current_user):
+        return
+    if target_user.role == Role.ADMIN or requested_role == Role.ADMIN:
+        raise app_error(
+            status.HTTP_403_FORBIDDEN,
+            "CANNOT_MODIFY_ADMIN",
+            "Only owners can modify admin accounts",
+        )
+
+
 @router.get("", response_model=UserListOut)
 def list_users(
     db: Annotated[Session, Depends(get_db)],
@@ -73,6 +86,7 @@ def update_user_role(
 
     user = _get_user_or_404(db, user_id)
     _ensure_owner_mutation_allowed(current_user, user)
+    _ensure_admin_mutation_allowed(current_user, user, body.role)
     if body.role == Role.OWNER and not _is_owner(current_user):
         raise app_error(
             status.HTTP_403_FORBIDDEN,
@@ -103,6 +117,7 @@ def update_user_status(
 
     user = _get_user_or_404(db, user_id)
     _ensure_owner_mutation_allowed(current_user, user)
+    _ensure_admin_mutation_allowed(current_user, user)
     if user.is_active != body.is_active:
         user.is_active = body.is_active
         user.token_version += 1
