@@ -32,9 +32,28 @@ describe('ArchitecturePage', () => {
   it('explains auth flow and security boundaries', () => {
     render(<ArchitecturePage />);
 
-    expect(screen.getByText('Google issues an OIDC ID token in the browser.')).toBeInTheDocument();
     expect(
-      screen.getByText('Production secrets live in AWS SSM Parameter Store instead of GitHub Actions.'),
+      screen.getByText(
+        'FastAPI issues a short-lived Redis nonce before Google sign-in is initialized.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'FastAPI verifies the token against Google public keys and consumes the nonce once.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Google ID tokens are verified server-side and bound to single-use Redis nonces before a local session is created.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Admins cannot promote users to admin or change another admin account.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Production secrets live in AWS SSM Parameter Store instead of GitHub Actions.',
+      ),
     ).toBeInTheDocument();
   });
 });
