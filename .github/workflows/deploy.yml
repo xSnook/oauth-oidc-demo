@@ -204,18 +204,27 @@ jobs:
           docker compose -f docker-compose.prod.yml pull
 
           docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
-          docker compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml up -d --force-recreate api web caddy
           docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
-          docker compose -f docker-compose.prod.yml restart caddy
+
+          docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q api)" \
+            | grep -q ':__GIT_SHA__$'
+          docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q web)" \
+            | grep -q ':__GIT_SHA__$'
+
+          DOMAIN="$(grep '^DOMAIN=' .env | cut -d= -f2)"
+          RESOLVE_ARG="${DOMAIN}:443:127.0.0.1"
 
           for i in $(seq 1 30); do
-            curl -fsS http://localhost/api/health && break
+            curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" && break
             sleep 2
             [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
           done
 
-          curl -fsS -D - http://localhost/ -o /dev/null | grep -qi '^Content-Security-Policy:'
-          curl -fsS -D - http://localhost/api/health -o /dev/null | grep -qi '^Content-Security-Policy:'
+          curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/dashboard" -o /dev/null \
+            | grep -qi '^Content-Security-Policy:'
+          curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" -o /dev/null \
+            | grep -qi '^Content-Security-Policy:'
 
           docker image prune -af --filter "until=72h"
           '''
