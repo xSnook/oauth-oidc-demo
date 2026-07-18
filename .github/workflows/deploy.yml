@@ -144,26 +144,45 @@ jobs:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          cat > ssm-commands.json <<'JSON'
-          {
-            "commands": [
-              "set -euo pipefail",
-              "cd /opt/app",
-              "chmod +x fetch-env.sh",
-              "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin \"$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)\"",
-              "./fetch-env.sh",
-              "RUNNING=$(docker inspect --format '{{.Config.Image}}' $(docker compose -f docker-compose.prod.yml ps -q api) 2>/dev/null | cut -d: -f2 || true)",
-              "[ -n \"$RUNNING\" ] && echo \"$RUNNING\" > .previous_tag || true",
-              "sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/\" .env",
-              "docker compose -f docker-compose.prod.yml pull",
-              "docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head",
-              "docker compose -f docker-compose.prod.yml up -d",
-              "for i in $(seq 1 30); do curl -fsS http://localhost/api/health && break; sleep 2; [ \"$i\" = \"30\" ] && { echo \"smoke test failed\"; exit 1; }; done",
-              "docker image prune -af --filter \"until=72h\""
-            ]
-          }
-          JSON
-          sed -i "s/__GIT_SHA__/${GIT_SHA}/g" ssm-commands.json
+          cat > remote-deploy.sh <<'SCRIPT'
+          set -euo pipefail
+          cd /opt/app
+          chmod +x fetch-env.sh
+
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin \
+              "$(grep '^ECR_REGISTRY=' .env | cut -d= -f2)"
+
+          ./fetch-env.sh
+
+          RUNNING=$(docker inspect --format '{{.Config.Image}}' \
+            $(docker compose -f docker-compose.prod.yml ps -q api) 2>/dev/null | cut -d: -f2 || true)
+          [ -n "$RUNNING" ] && echo "$RUNNING" > .previous_tag
+
+          sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
+          docker compose -f docker-compose.prod.yml pull
+
+          docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+          docker compose -f docker-compose.prod.yml up -d
+
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost/api/health && break
+            sleep 2
+            [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
+          done
+
+          docker image prune -af --filter "until=72h"
+          SCRIPT
+          sed -i "s/__GIT_SHA__/${GIT_SHA}/g" remote-deploy.sh
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          script = Path("remote-deploy.sh").read_text()
+          command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
+          Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
+          PY
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name AWS-RunShellScript \
