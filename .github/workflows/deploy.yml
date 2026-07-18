@@ -64,6 +64,9 @@ jobs:
           test "$(alembic heads | wc -l)" -eq 1
           alembic upgrade head
 
+      - name: Test deployment script transport
+        run: python -m unittest discover -s deploy -p "test_*.py"
+
       - name: Test backend
         working-directory: backend
         run: python -m pytest -q
@@ -204,11 +207,10 @@ jobs:
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
 
-          # The SSM shell is reading this script from stdin, so the one-off container
-          # must not consume the deploy commands that follow the migration.
+          # Keep Compose subprocesses detached from SSM command input.
           docker compose -f docker-compose.prod.yml run --rm -T api alembic upgrade head </dev/null
           docker compose -f docker-compose.prod.yml up -d --force-recreate api web caddy
-          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
+          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile </dev/null
 
           docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q api)" \
             | grep -q ':__GIT_SHA__$'
@@ -247,14 +249,7 @@ jobs:
           Path("remote-deploy.sh").write_text(script)
           BUILD_REMOTE_DEPLOY
 
-          python3 - <<'BUILD_SSM_COMMANDS'
-          import json
-          from pathlib import Path
-
-          script = Path("remote-deploy.sh").read_text()
-          command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
-          Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
-          BUILD_SSM_COMMANDS
+          python3 deploy/build_ssm_command.py remote-deploy.sh ssm-commands.json
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name AWS-RunShellScript \
