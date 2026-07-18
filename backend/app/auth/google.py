@@ -9,7 +9,7 @@ class ProviderTokenError(Exception):
     pass
 
 
-def verify_id_token(raw_token: str) -> VerifiedIdentity:
+def verify_id_token(raw_token: str, expected_nonce: str) -> VerifiedIdentity:
     try:
         claims = id_token.verify_oauth2_token(
             raw_token,
@@ -24,6 +24,8 @@ def verify_id_token(raw_token: str) -> VerifiedIdentity:
         raise ProviderTokenError("Invalid Google issuer")
     if not claims.get("email_verified"):
         raise ProviderTokenError("Google email is not verified")
+    if claims.get("nonce") != expected_nonce:
+        raise ProviderTokenError("Google token nonce does not match")
 
     subject = claims.get("sub")
     email = claims.get("email")

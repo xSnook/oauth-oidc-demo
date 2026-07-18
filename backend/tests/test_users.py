@@ -21,9 +21,11 @@ def _login(
 ):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _identity(email, subject, display_name),
+        lambda raw_token, expected_nonce: _identity(email, subject, display_name),
     )
-    response = client.post("/api/auth/google", json={"id_token": f"token-{subject}"})
+    response = client.post(
+        "/api/auth/google", json={"id_token": f"token-{subject}", "nonce": "nonce"}
+    )
     assert response.status_code == 200
     return response.json()
 
@@ -86,9 +88,11 @@ def test_admin_role_change_invalidates_user_session(client, monkeypatch):
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _identity("user@example.com", "user-sub"),
+        lambda raw_token, expected_nonce: _identity("user@example.com", "user-sub"),
     )
-    user_login = client.post("/api/auth/google", json={"id_token": "token-user-sub"})
+    user_login = client.post(
+        "/api/auth/google", json={"id_token": "token-user-sub", "nonce": "nonce"}
+    )
     assert user_login.status_code == 200
     user = user_login.json()
     user_session = user_login.cookies[SESSION_COOKIE_NAME]
@@ -168,9 +172,11 @@ def test_admin_status_change_invalidates_user_session(client, monkeypatch):
     _login(client, monkeypatch, "admin@example.com", "admin-sub")
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _identity("user@example.com", "user-sub"),
+        lambda raw_token, expected_nonce: _identity("user@example.com", "user-sub"),
     )
-    user_login = client.post("/api/auth/google", json={"id_token": "token-user-sub"})
+    user_login = client.post(
+        "/api/auth/google", json={"id_token": "token-user-sub", "nonce": "nonce"}
+    )
     assert user_login.status_code == 200
     user = user_login.json()
     user_session = user_login.cookies[SESSION_COOKIE_NAME]

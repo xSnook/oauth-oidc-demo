@@ -4,6 +4,10 @@ import { ApiError, apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { User } from '../types';
 
+interface OidcNonceResponse {
+  nonce: string;
+}
+
 export function LoginPage() {
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +24,7 @@ export function LoginPage() {
     }
 
     let attempts = 0;
+    let cancelled = false;
     const timer = window.setInterval(() => {
       attempts += 1;
       if (!window.google?.accounts.id || !googleButtonRef.current) {
@@ -31,33 +36,51 @@ export function LoginPage() {
       }
 
       window.clearInterval(timer);
-      setGoogleLoaded(true);
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: async (credentialResponse) => {
-          setError(null);
-          try {
-            const signedInUser = await apiClient.post<User>('/api/auth/google', {
-              id_token: credentialResponse.credential,
-            });
-            setUser(signedInUser);
-            navigate(from, { replace: true });
-          } catch (err) {
+      void (async () => {
+        try {
+          const { nonce } = await apiClient.post<OidcNonceResponse>('/api/auth/nonce');
+          if (cancelled || !window.google?.accounts.id || !googleButtonRef.current) {
+            return;
+          }
+
+          setGoogleLoaded(true);
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            nonce,
+            callback: async (credentialResponse) => {
+              setError(null);
+              try {
+                const signedInUser = await apiClient.post<User>('/api/auth/google', {
+                  id_token: credentialResponse.credential,
+                  nonce,
+                });
+                setUser(signedInUser);
+                navigate(from, { replace: true });
+              } catch (err) {
+                setError(err instanceof ApiError ? err.message : 'Google sign-in failed.');
+              }
+            },
+          });
+          const buttonWidth = googleButtonRef.current.clientWidth || 380;
+          window.google.accounts.id.renderButton(googleButtonRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: buttonWidth,
+            text: 'signin_with',
+          });
+        } catch (err) {
+          if (!cancelled) {
             setError(err instanceof ApiError ? err.message : 'Google sign-in failed.');
           }
-        },
-      });
-      const buttonWidth = googleButtonRef.current.clientWidth || 380;
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: 'outline',
-        size: 'large',
-        width: buttonWidth,
-        text: 'signin_with',
-      });
+        }
+      })();
     }, 100);
 
-    return () => window.clearInterval(timer);
-  }, [from, loading, navigate, setUser, user]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [from, googleClientId, loading, navigate, setUser, user]);
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />;

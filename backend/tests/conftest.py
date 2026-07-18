@@ -48,6 +48,14 @@ def clean_database():
         conn.execute(text("ALTER TABLE users AUTO_INCREMENT = 1"))
 
 
+@pytest.fixture(autouse=True)
+def stub_oidc_nonce_consume(monkeypatch):
+    async def consume_nonce(nonce: str) -> None:
+        return None
+
+    monkeypatch.setattr("app.routers.auth.consume_oidc_nonce", consume_nonce)
+
+
 @pytest.fixture
 def client():
     app = create_app()

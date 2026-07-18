@@ -9,6 +9,7 @@ from app.auth.jwt import (
     decode_session_token,
     remaining_session_ttl_seconds,
 )
+from app.auth.oidc_nonce import OidcNonceError
 from app.models import User, UserIdentity
 from app.schemas.user import Role
 from tests.conftest import TestingSessionLocal
@@ -26,10 +27,12 @@ def _google_identity(email: str = "user@example.com", subject: str = "google-sub
 def test_first_google_login_provisions_user_and_sets_cookie(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
 
-    response = client.post("/api/auth/google", json={"id_token": "token"})
+    response = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
 
     assert response.status_code == 200
     assert "session=" in response.headers["set-cookie"]
@@ -49,10 +52,12 @@ def test_first_google_login_provisions_user_and_sets_cookie(client, monkeypatch)
 def test_configured_admin_email_is_owner_on_first_login_only(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(email="admin@example.com"),
+        lambda raw_token, expected_nonce: _google_identity(email="admin@example.com"),
     )
 
-    first = client.post("/api/auth/google", json={"id_token": "token"})
+    first = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert first.status_code == 200
     assert first.json()["role"] == Role.OWNER
 
@@ -62,7 +67,9 @@ def test_configured_admin_email_is_owner_on_first_login_only(client, monkeypatch
         user.role = Role.USER
         db.commit()
 
-    second = client.post("/api/auth/google", json={"id_token": "token"})
+    second = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert second.status_code == 200
     assert second.json()["role"] == Role.USER
 
@@ -70,10 +77,12 @@ def test_configured_admin_email_is_owner_on_first_login_only(client, monkeypatch
 def test_repeat_login_updates_last_login(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
 
-    first = client.post("/api/auth/google", json={"id_token": "token"})
+    first = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert first.status_code == 200
     first_login = datetime.fromisoformat(
         first.json()["last_login_at"].replace("Z", "+00:00")
@@ -85,7 +94,9 @@ def test_repeat_login_updates_last_login(client, monkeypatch):
         user.last_login_at = datetime(2026, 1, 1)
         db.commit()
 
-    second = client.post("/api/auth/google", json={"id_token": "token"})
+    second = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert second.status_code == 200
     second_login = datetime.fromisoformat(
         second.json()["last_login_at"].replace("Z", "+00:00")
@@ -97,10 +108,13 @@ def test_repeat_login_updates_last_login(client, monkeypatch):
 def test_disabled_account_cannot_login_and_gets_no_cookie(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
     assert (
-        client.post("/api/auth/google", json={"id_token": "token"}).status_code == 200
+        client.post(
+            "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+        ).status_code
+        == 200
     )
 
     with TestingSessionLocal() as db:
@@ -109,7 +123,9 @@ def test_disabled_account_cannot_login_and_gets_no_cookie(client, monkeypatch):
         user.is_active = False
         db.commit()
 
-    response = client.post("/api/auth/google", json={"id_token": "token"})
+    response = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
 
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "ACCOUNT_DISABLED"
@@ -119,21 +135,86 @@ def test_disabled_account_cannot_login_and_gets_no_cookie(client, monkeypatch):
 def test_invalid_google_token_returns_401(client, monkeypatch):
     from app.auth.google import ProviderTokenError
 
-    def raise_invalid(raw_token: str):
+    def raise_invalid(raw_token: str, expected_nonce: str):
         raise ProviderTokenError("nope")
 
     monkeypatch.setattr("app.auth.google.verify_id_token", raise_invalid)
 
-    response = client.post("/api/auth/google", json={"id_token": "bad"})
+    response = client.post(
+        "/api/auth/google", json={"id_token": "bad", "nonce": "nonce"}
+    )
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "INVALID_TOKEN"
 
 
+def test_google_login_passes_and_consumes_nonce(client, monkeypatch):
+    events: list[str] = []
+
+    def verify(raw_token: str, expected_nonce: str):
+        events.append(f"verify:{raw_token}:{expected_nonce}")
+        return _google_identity()
+
+    async def consume(nonce: str) -> None:
+        events.append(f"consume:{nonce}")
+
+    monkeypatch.setattr("app.auth.google.verify_id_token", verify)
+    monkeypatch.setattr("app.routers.auth.consume_oidc_nonce", consume)
+
+    response = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce-123"}
+    )
+
+    assert response.status_code == 200
+    assert events == ["verify:token:nonce-123", "consume:nonce-123"]
+
+
+def test_google_login_rejects_consumed_or_expired_nonce(client, monkeypatch):
+    async def consume(nonce: str) -> None:
+        raise OidcNonceError("already consumed")
+
+    monkeypatch.setattr(
+        "app.auth.google.verify_id_token",
+        lambda raw_token, expected_nonce: _google_identity(),
+    )
+    monkeypatch.setattr("app.routers.auth.consume_oidc_nonce", consume)
+
+    response = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "replayed"}
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "INVALID_TOKEN"
+
+
+def test_nonce_endpoint_returns_fresh_nonce(client, monkeypatch):
+    async def issue() -> str:
+        return "nonce-123"
+
+    monkeypatch.setattr("app.routers.auth.issue_oidc_nonce", issue)
+
+    response = client.post("/api/auth/nonce")
+
+    assert response.status_code == 200
+    assert response.json() == {"nonce": "nonce-123"}
+
+
+def test_nonce_endpoint_fails_closed_when_store_unavailable(client, monkeypatch):
+    async def issue() -> str:
+        raise OidcNonceError("redis unavailable")
+
+    monkeypatch.setattr("app.routers.auth.issue_oidc_nonce", issue)
+
+    response = client.post("/api/auth/nonce")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "NONCE_UNAVAILABLE"
+
+
 def test_wrong_content_type_returns_415(client):
     response = client.post(
         "/api/auth/google",
-        content='{"id_token":"token"}',
+        content='{"id_token":"token","nonce":"nonce"}',
         headers={"content-type": "text/plain"},
     )
 
@@ -151,9 +232,11 @@ def test_me_requires_session(client):
 def test_me_returns_current_user_with_session(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
-    login = client.post("/api/auth/google", json={"id_token": "token"})
+    login = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert login.status_code == 200
 
     response = client.get("/api/auth/me")
@@ -180,10 +263,13 @@ def test_revoked_session_cannot_access_me(client, monkeypatch):
     monkeypatch.setattr("app.auth.deps.is_session_jti_revoked", is_revoked)
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
     assert (
-        client.post("/api/auth/google", json={"id_token": "token"}).status_code == 200
+        client.post(
+            "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+        ).status_code
+        == 200
     )
 
     response = client.get("/api/auth/me")
@@ -195,9 +281,11 @@ def test_revoked_session_cannot_access_me(client, monkeypatch):
 def test_stale_token_version_cannot_access_me(client, monkeypatch):
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
-    login = client.post("/api/auth/google", json={"id_token": "token"})
+    login = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert login.status_code == 200
 
     with TestingSessionLocal() as db:
@@ -220,10 +308,12 @@ def test_logout_revokes_session_jti_and_clears_cookie(client, monkeypatch):
 
     monkeypatch.setattr(
         "app.auth.google.verify_id_token",
-        lambda raw_token: _google_identity(),
+        lambda raw_token, expected_nonce: _google_identity(),
     )
     monkeypatch.setattr("app.routers.auth.revoke_session_jti", revoke)
-    login = client.post("/api/auth/google", json={"id_token": "token"})
+    login = client.post(
+        "/api/auth/google", json={"id_token": "token", "nonce": "nonce"}
+    )
     assert login.status_code == 200
     session = login.cookies[SESSION_COOKIE_NAME]
     payload = decode_session_token(session)
@@ -237,7 +327,9 @@ def test_logout_revokes_session_jti_and_clears_cookie(client, monkeypatch):
 
 
 def test_microsoft_endpoint_returns_404(client):
-    response = client.post("/api/auth/microsoft", json={"id_token": "token"})
+    response = client.post(
+        "/api/auth/microsoft", json={"id_token": "token", "nonce": "nonce"}
+    )
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "NOT_FOUND"
