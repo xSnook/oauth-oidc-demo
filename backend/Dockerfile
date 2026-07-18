@@ -5,12 +5,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSLo /app/rds-global-bundle.pem \
        https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+COPY requirements.lock ./
+RUN pip install --require-hashes -r requirements.lock
 
 FROM base AS dev
-COPY requirements-dev.txt ./
-RUN pip install -r requirements-dev.txt
+COPY requirements-dev.lock ./
+RUN pip install --require-hashes -r requirements-dev.lock
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
