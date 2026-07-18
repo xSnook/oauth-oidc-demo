@@ -144,9 +144,31 @@ jobs:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          cat > remote-deploy.sh <<'SCRIPT'
-          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def heredoc(path, marker, content):
+              if marker in content:
+                  raise ValueError(f"{marker} marker appears in {path}")
+              return f"cat > {path} <<'{marker}'\n{content.rstrip()}\n{marker}\n"
+
+          deploy_files = "\n".join(
+              [
+                  heredoc("Caddyfile", "REMOTE_CADDYFILE", Path("deploy/Caddyfile").read_text()),
+                  heredoc(
+                      "docker-compose.prod.yml",
+                      "REMOTE_COMPOSE",
+                      Path("deploy/docker-compose.prod.yml").read_text(),
+                  ),
+                  heredoc("fetch-env.sh", "REMOTE_FETCH_ENV", Path("deploy/fetch-env.sh").read_text()),
+              ]
+          )
+
+          script = r'''set -euo pipefail
           cd /opt/app
+
+          __DEPLOY_FILES__
           chmod +x fetch-env.sh
 
           if ! command -v docker-credential-ecr-login >/dev/null 2>&1; then
@@ -183,6 +205,7 @@ jobs:
 
           docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
           docker compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml restart caddy
 
           for i in $(seq 1 30); do
             curl -fsS http://localhost/api/health && break
@@ -191,8 +214,12 @@ jobs:
           done
 
           docker image prune -af --filter "until=72h"
-          SCRIPT
-          sed -i "s/__GIT_SHA__/${GIT_SHA}/g" remote-deploy.sh
+          '''
+
+          script = script.replace("__DEPLOY_FILES__", deploy_files)
+          script = script.replace("__GIT_SHA__", os.environ["GIT_SHA"])
+          Path("remote-deploy.sh").write_text(script)
+          PY
 
           python3 - <<'PY'
           import json
