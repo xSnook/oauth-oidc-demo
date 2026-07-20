@@ -403,16 +403,16 @@ unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
 1. **DB security group**: EC2 → Security Groups → create **`app-rds-sg`**, inbound one
    rule: **MYSQL/Aurora 3306**, Source = **`app-ec2-sg`** (type the SG name, select the
    `sg-...`). SG-chaining: only the app server can reach the DB.
-2. **Parameter group**: RDS → Parameter groups → Create (family `mysql8.0`) → name
-   `app-mysql8` → edit: `character_set_server=utf8mb4`,
+2. **Parameter group**: RDS → Parameter groups → Create (family `mysql8.4`) → name
+   `app-mysql84` → edit: `character_set_server=utf8mb4`,
    `collation_server=utf8mb4_0900_ai_ci`.
-3. **Create database**: Standard create → MySQL 8.0.x → template Dev/Test →
+3. **Create database**: Standard create → MySQL 8.4.x → template Dev/Test →
    **Single-AZ** → identifier **`app-prod-mysql`** → master user `appadmin`,
    **self-managed** strong password (20+ chars, letters+digits only — URL-special chars
    like `@ : / ? #` complicate `DATABASE_URL`) → instance **db.t4g.micro** → storage
    20 GiB gp3, autoscale max 50 → Connectivity: default VPC, **Public access: No**,
    existing SG **`app-rds-sg`** only → Additional configuration: **initial database name
-   `appdb`** (don't skip — nothing creates it otherwise), DB parameter group `app-mysql8`,
+   `appdb`** (don't skip — nothing creates it otherwise), DB parameter group `app-mysql84`,
    automated backups **7 days**, encryption on, Performance Insights off, **deletion
    protection on**.
 4. When Available, copy the **Endpoint**. Verify the SG chain from a Session Manager shell:
@@ -498,7 +498,7 @@ and update `DOMAIN=` in `/opt/app/.env`.
 - [ ] `app-github-deploy` role: trust scoped to `repo:<org>/<repo>:ref:refs/heads/main`, policy has the **real `sg-` id**
 - [ ] ECR `app-api` + `app-web` exist (lifecycle: keep 10)
 - [ ] `app-server` running: role `app-ec2-role`, SG `app-ec2-sg` (80/443 only, **no 22**), Docker + compose + AWS CLI verified via Session Manager, Elastic IP attached, `/opt/app/.env` bootstrapped
-- [ ] `app-prod-mysql` Available: Public access No, SG `app-rds-sg` ← `app-ec2-sg`, initial DB `appdb`, param group `app-mysql8`, backups 7d; `appuser` created; port test says OK
+- [ ] `app-prod-mysql` Available: Public access No, SG `app-rds-sg` ← `app-ec2-sg`, initial DB `appdb`, param group `app-mysql84`, backups 7d; `appuser` created; port test says OK
 - [ ] All ten `/app/prod/*` params exist; instance `get-parameters-by-path` works
 - [ ] GitHub: 3 secrets + 2 variables set (section 3.3)
 - [ ] Domain resolves to the Elastic IP; Google origins + Entra redirect URIs updated
@@ -509,5 +509,5 @@ and update `DOMAIN=` in `/opt/app/.env`.
 **Day-2 notes:** interactive server access = Session Manager (no SSH keys). Rollback =
 `PLAN.md` §13. RDS restore gotcha: restoring a snapshot creates a **new** instance with a
 new endpoint and **default** SG/subnet/parameter group — re-attach `app-rds-sg` +
-`app-mysql8` via `--vpc-security-group-ids`/`--db-subnet-group-name`, then update
+`app-mysql84` via `--vpc-security-group-ids`/`--db-subnet-group-name`, then update
 `/app/prod/DATABASE_URL` and redeploy.

@@ -9,6 +9,7 @@ from app.config import settings
 from app.errors import error_detail
 from app.rate_limit import RateLimiter, RedisRateLimiter
 from app.routers import auth, dashboard, health, users
+from app.security_headers import apply_security_headers
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,12 @@ def create_app(rate_limiter: RateLimiter | None = None) -> FastAPI:
                     headers={"Retry-After": str(retry_after)},
                 )
             return await call_next(request)
+
+    @app.middleware("http")
+    async def security_headers_middleware(request: Request, call_next):
+        response = await call_next(request)
+        apply_security_headers(response.headers)
+        return response
 
     app.include_router(health.router)
     app.include_router(auth.router)

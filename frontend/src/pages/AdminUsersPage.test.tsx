@@ -102,7 +102,8 @@ describe('AdminUsersPage', () => {
     expect(apiMocks.get).toHaveBeenCalledWith('/api/users');
   });
 
-  it('updates role and status after the server confirms', async () => {
+  it('updates role and status after the server confirms for owners', async () => {
+    authState.value = { user: ownerUser };
     apiMocks.get.mockResolvedValueOnce(userList);
     apiMocks.patch
       .mockResolvedValueOnce({ ...regularUser, role: Role.Admin })
@@ -126,6 +127,27 @@ describe('AdminUsersPage', () => {
       expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/status', { is_active: false }),
     );
     expect(within(regularRow).getByText('Inactive')).toBeInTheDocument();
+  });
+
+  it('keeps role controls locked for admins while regular user status remains editable', async () => {
+    apiMocks.get.mockResolvedValueOnce(userList);
+    apiMocks.patch.mockResolvedValueOnce({ ...regularUser, is_active: false });
+    const user = userEvent.setup();
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('user@example.com');
+    const regularRow = rowFor('user@example.com');
+
+    expect(within(regularRow).getByRole('combobox')).toBeDisabled();
+    expect(within(regularRow).getByRole('combobox')).toHaveValue(Role.User);
+    expect(within(regularRow).getByRole('checkbox')).not.toBeDisabled();
+
+    await user.click(within(regularRow).getByRole('checkbox'));
+
+    await waitFor(() =>
+      expect(apiMocks.patch).toHaveBeenCalledWith('/api/users/2/status', { is_active: false }),
+    );
   });
 
   it('lets owners assign owner role', async () => {
@@ -155,6 +177,31 @@ describe('AdminUsersPage', () => {
     const ownerRow = rowFor('owner@example.com');
     expect(within(ownerRow).getByRole('combobox')).toBeDisabled();
     expect(within(ownerRow).getByRole('checkbox')).toBeDisabled();
+  });
+
+  it('prevents admins from editing other admin accounts', async () => {
+    const otherAdmin: User = {
+      ...adminUser,
+      id: 5,
+      email: 'other-admin@example.com',
+      display_name: 'Other Admin',
+    };
+    apiMocks.get.mockResolvedValueOnce({ items: [adminUser, otherAdmin], total: 2 });
+
+    render(<AdminUsersPage />);
+
+    await screen.findByText('other-admin@example.com');
+    const otherAdminRow = rowFor('other-admin@example.com');
+    expect(within(otherAdminRow).getByRole('combobox')).toBeDisabled();
+    expect(within(otherAdminRow).getByRole('combobox')).toHaveAttribute(
+      'title',
+      'Only owners can change admin accounts',
+    );
+    expect(within(otherAdminRow).getByRole('checkbox')).toBeDisabled();
+    expect(within(otherAdminRow).getByText('Active').closest('label')).toHaveAttribute(
+      'title',
+      'Only owners can change admin accounts',
+    );
   });
 
   it('does not call update endpoints when values do not change', async () => {
@@ -208,6 +255,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('keeps the row unchanged when role updates fail', async () => {
+    authState.value = { user: ownerUser };
     apiMocks.get.mockResolvedValueOnce(userList);
     apiMocks.patch.mockRejectedValueOnce(new ApiError(400, 'BAD_ROLE', 'Role update denied.'));
     const user = userEvent.setup();
@@ -223,6 +271,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('shows fallback errors when role updates fail unexpectedly', async () => {
+    authState.value = { user: ownerUser };
     apiMocks.get.mockResolvedValueOnce(userList);
     apiMocks.patch.mockRejectedValueOnce(new Error('network'));
     const user = userEvent.setup();

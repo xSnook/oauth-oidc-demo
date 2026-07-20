@@ -3,7 +3,12 @@ import { ApiError, apiClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { RoleBadge } from '../components/RoleBadge';
+import { PageHero, SummaryCard } from '../components/ui';
 import { Role, type User, type UserList } from '../types';
+
+function formatDate(value: string | null) {
+  return value ? new Date(value).toLocaleDateString() : 'Never';
+}
 
 export function AdminUsersPage() {
   const { user: currentUser } = useAuth();
@@ -79,25 +84,40 @@ export function AdminUsersPage() {
   }
 
   const currentUserIsOwner = currentUser?.role === Role.Owner;
+  const activeUsers = users.filter((item) => item.is_active).length;
+  const adminUsers = users.filter(
+    (item) => item.role === Role.Admin || item.role === Role.Owner,
+  ).length;
 
   return (
     <section className="page-stack">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Admin</p>
-          <h1>User management</h1>
-          <p className="muted">{loading ? 'Loading users...' : `${total} users`}</p>
-        </div>
-      </div>
+      <PageHero
+        action={
+          <div className="admin-count">
+            <span>{loading ? 'Loading users...' : `${total} users`}</span>
+          </div>
+        }
+        className="admin-heading"
+        eyebrow="Admin"
+        title="User management"
+      >
+        Manage account access without changing the underlying OAuth/OIDC login flow.
+      </PageHero>
 
       {error ? (
         <div className="banner error dismissible">
           <span>{error}</span>
-          <button type="button" className="button ghost" onClick={() => setError(null)}>
+          <button type="button" className="button quiet" onClick={() => setError(null)}>
             Dismiss
           </button>
         </div>
       ) : null}
+
+      <div className="summary-strip" aria-label="User summary">
+        <SummaryCard label="Total" value={loading ? '...' : total} />
+        <SummaryCard label="Active" value={loading ? '...' : activeUsers} />
+        <SummaryCard label="Elevated" value={loading ? '...' : adminUsers} />
+      </div>
 
       <div className="table-wrap">
         <table>
@@ -109,24 +129,45 @@ export function AdminUsersPage() {
               <th>Role</th>
               <th>Active</th>
               <th>Created</th>
+              <th>Last login</th>
             </tr>
           </thead>
           <tbody>
             {users.map((item) => {
               const isSelf = item.id === currentUser?.id;
-              const isProtectedOwner = item.role === Role.Owner && !currentUserIsOwner;
-              const disabled = isSelf || isProtectedOwner || savingId === item.id;
-              const controlTitle = isSelf
+              const isOwnerRow = item.role === Role.Owner;
+              const isAdminRow = item.role === Role.Admin;
+              const isProtectedOwner = isOwnerRow && !currentUserIsOwner;
+              const isProtectedAdmin = isAdminRow && !currentUserIsOwner;
+              const elevatedRowLocked = isProtectedOwner || isProtectedAdmin;
+              const roleDisabled =
+                isSelf || !currentUserIsOwner || elevatedRowLocked || savingId === item.id;
+              const statusDisabled = isSelf || elevatedRowLocked || savingId === item.id;
+              const roleTitle = isSelf
                 ? 'You cannot change your own role or deactivate yourself'
                 : isProtectedOwner
                   ? 'Only owners can change owner accounts'
-                : undefined;
+                  : isProtectedAdmin
+                    ? 'Only owners can change admin accounts'
+                    : !currentUserIsOwner
+                      ? 'Only owners can change account roles'
+                      : undefined;
+              const statusTitle = isSelf
+                ? 'You cannot change your own role or deactivate yourself'
+                : isProtectedOwner
+                  ? 'Only owners can change owner accounts'
+                  : isProtectedAdmin
+                    ? 'Only owners can change admin accounts'
+                    : undefined;
 
               return (
-                <tr key={item.id}>
+                <tr
+                  className={roleDisabled || statusDisabled ? 'row-has-locked-controls' : undefined}
+                  key={item.id}
+                >
                   <td>
                     <div className="primary-cell">
-                      <span>{item.email}</span>
+                      <span className="email-text">{item.email}</span>
                       {isSelf ? <span className="muted">(you)</span> : null}
                     </div>
                   </td>
@@ -141,12 +182,14 @@ export function AdminUsersPage() {
                   <td>
                     <select
                       value={item.role}
-                      disabled={disabled}
-                      title={controlTitle}
+                      disabled={roleDisabled}
+                      title={roleTitle}
                       onChange={(event) => void updateRole(item, event.target.value as Role)}
                     >
                       <option value={Role.User}>user</option>
-                      <option value={Role.Admin}>admin</option>
+                      {currentUserIsOwner || item.role === Role.Admin ? (
+                        <option value={Role.Admin}>admin</option>
+                      ) : null}
                       {currentUserIsOwner || item.role === Role.Owner ? (
                         <option value={Role.Owner}>owner</option>
                       ) : null}
@@ -156,17 +199,23 @@ export function AdminUsersPage() {
                     </span>
                   </td>
                   <td>
-                    <label className="switch-control" title={controlTitle}>
+                    <label
+                      className={`switch-control${statusDisabled ? ' is-disabled' : ''}`}
+                      title={statusTitle}
+                      aria-disabled={statusDisabled}
+                    >
                       <input
                         type="checkbox"
                         checked={item.is_active}
-                        disabled={disabled}
+                        disabled={statusDisabled}
                         onChange={(event) => void updateStatus(item, event.target.checked)}
                       />
+                      <span className="switch-track" aria-hidden="true" />
                       <span>{item.is_active ? 'Active' : 'Inactive'}</span>
                     </label>
                   </td>
-                  <td>{new Date(item.created_at).toLocaleDateString()}</td>
+                  <td>{formatDate(item.created_at)}</td>
+                  <td>{formatDate(item.last_login_at)}</td>
                 </tr>
               );
             })}

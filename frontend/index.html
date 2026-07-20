@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OAuth OIDC Demo</title>
+    <script>
+      (() => {
+        try {
+          const storedTheme = window.localStorage.getItem('oauth-oidc-demo-theme');
+          const theme = /^(system|light|dark)$/.test(storedTheme || '')
+            ? storedTheme
+            : 'system';
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme === 'system' ? 'light dark' : theme;
+        } catch {
+          document.documentElement.dataset.theme = 'system';
+          document.documentElement.style.colorScheme = 'light dark';
+        }
+      })();
+    </script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
