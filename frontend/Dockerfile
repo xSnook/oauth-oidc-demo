@@ -11,9 +11,11 @@ FROM base AS build
 COPY . .
 ARG VITE_GOOGLE_CLIENT_ID
 ARG VITE_AZURE_CLIENT_ID
+ARG APP_GIT_SHA=development
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
     VITE_AZURE_CLIENT_ID=$VITE_AZURE_CLIENT_ID
 RUN npm run build
+RUN printf '%s\n' "$APP_GIT_SHA" > /app/dist/deploy-sha
 
 FROM nginxinc/nginx-unprivileged:alpine AS prod
 COPY nginx.conf /etc/nginx/conf.d/default.conf

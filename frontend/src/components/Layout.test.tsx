@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -53,6 +53,70 @@ describe('Layout', () => {
     await user.click(screen.getByRole('button', { name: 'Log out' }));
 
     expect(authState.value.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows theme options from the profile trigger', async () => {
+    const user = userEvent.setup();
+    renderLayout();
+
+    expect(screen.queryByRole('button', { name: 'dark' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open profile options for Regular User' }));
+
+    expect(screen.getByRole('button', { name: 'system' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'light' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'dark' })).toBeInTheDocument();
+  });
+
+  it('closes the profile popover from outside pointer and Escape interactions', async () => {
+    const user = userEvent.setup();
+    renderLayout();
+
+    const profileTrigger = screen.getByRole('button', {
+      name: 'Open profile options for Regular User',
+    });
+
+    await user.click(profileTrigger);
+    expect(screen.getByRole('dialog', { name: 'Profile theme options' })).toBeInTheDocument();
+
+    fireEvent.pointerDown(within(screen.getByRole('dialog')).getByText('Theme'));
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(screen.getByRole('dialog', { name: 'Profile theme options' })).toBeInTheDocument();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('dialog', { name: 'Profile theme options' })).not.toBeInTheDocument();
+
+    await user.click(profileTrigger);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Profile theme options' })).not.toBeInTheDocument();
+  });
+
+  it('falls back to email or signed-in identity text when display name is missing', () => {
+    authState.value = {
+      user: { ...regularUser, display_name: '' },
+      logout: vi.fn(),
+    };
+
+    renderLayout();
+
+    expect(
+      screen.getByRole('button', { name: 'Open profile options for user@example.com' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('user@example.com')).toHaveLength(2);
+  });
+
+  it('renders a signed-in fallback when no user object is available', () => {
+    authState.value = {
+      user: null,
+      logout: vi.fn(),
+    };
+
+    renderLayout();
+
+    expect(
+      screen.getByRole('button', { name: 'Open profile options for Signed in' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
   });
 
   it('shows admin navigation for admins', () => {
