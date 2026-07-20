@@ -11,7 +11,7 @@
     "test:file": "vitest run"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "4.7.0",
+    "@vitejs/plugin-react": "6.0.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "6.30.1",
