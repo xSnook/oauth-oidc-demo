@@ -1,3 +1,5 @@
+import { PageHero, SectionHeading } from '../components/ui';
+
 const stackSections = [
   {
     title: 'Frontend',
@@ -37,19 +39,32 @@ const securityNotes = [
 export function ArchitecturePage() {
   return (
     <section className="page-stack">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Architecture</p>
-          <h1>How the demo is put together</h1>
-          <p className="muted page-intro">
-            A compact map of the libraries, services, and security boundaries behind this
-            OAuth/OIDC demo.
-          </p>
-        </div>
-      </div>
+      <PageHero
+        action={
+          <div className="architecture-orbit" aria-hidden="true">
+            <svg viewBox="0 0 220 140">
+              <rect x="12" y="38" width="54" height="34" rx="6" />
+              <rect x="84" y="16" width="52" height="34" rx="6" />
+              <rect x="154" y="38" width="54" height="34" rx="6" />
+              <rect x="84" y="90" width="52" height="34" rx="6" />
+              <path d="M66 55h18M136 33l18 22M154 55h-18M110 50v40" />
+              <circle cx="39" cy="55" r="4" />
+              <circle cx="110" cy="33" r="4" />
+              <circle cx="181" cy="55" r="4" />
+              <circle cx="110" cy="107" r="4" />
+            </svg>
+          </div>
+        }
+        className="architecture-hero"
+        eyebrow="Architecture"
+        title="How the demo is put together"
+      >
+        A compact map of the libraries, services, and security boundaries behind this OAuth/OIDC
+        demo.
+      </PageHero>
 
       <section className="info-section" aria-labelledby="capabilities-heading">
-        <h2 id="capabilities-heading">What It Demonstrates</h2>
+        <SectionHeading eyebrow="Capabilities" id="capabilities-heading" title="What It Demonstrates" />
         <div className="architecture-summary">
           <article>
             <span>Identity</span>
@@ -70,7 +85,7 @@ export function ArchitecturePage() {
       </section>
 
       <section className="info-section" aria-labelledby="stack-heading">
-        <h2 id="stack-heading">Tech Stack</h2>
+        <SectionHeading eyebrow="Runtime" id="stack-heading" title="Tech Stack" />
         <div className="stack-grid">
           {stackSections.map((section) => (
             <article className="stack-card" key={section.title}>
@@ -88,7 +103,7 @@ export function ArchitecturePage() {
 
       <section className="info-section flow-grid" aria-labelledby="flow-heading">
         <div>
-          <h2 id="flow-heading">Auth Flow</h2>
+          <SectionHeading eyebrow="Sequence" id="flow-heading" title="Auth Flow" />
           <ol className="flow-list">
             {authFlow.map((step) => (
               <li key={step}>{step}</li>
@@ -96,7 +111,7 @@ export function ArchitecturePage() {
           </ol>
         </div>
         <div>
-          <h2>Security Boundaries</h2>
+          <SectionHeading eyebrow="Guardrails" title="Security Boundaries" />
           <ul className="check-list">
             {securityNotes.map((note) => (
               <li key={note}>{note}</li>

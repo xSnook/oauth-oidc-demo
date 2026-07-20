@@ -259,7 +259,7 @@ function Ensure-InstanceProfile {
 }
 
 function Ensure-RdsParameterGroup {
-    $name = "app-mysql8"
+    $name = "app-mysql84"
     $existing = Invoke-Aws @(
         "rds", "describe-db-parameter-groups",
         "--db-parameter-group-name", $name,
@@ -271,8 +271,8 @@ function Ensure-RdsParameterGroup {
         Invoke-Aws @(
             "rds", "create-db-parameter-group",
             "--db-parameter-group-name", $name,
-            "--db-parameter-group-family", "mysql8.0",
-            "--description", "OAuth OIDC demo MySQL 8 parameter group",
+            "--db-parameter-group-family", "mysql8.4",
+            "--description", "OAuth OIDC demo MySQL 8.4 parameter group",
             "--region", $region
         )
     }

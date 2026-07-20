@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.4
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: appdb
@@ -63,6 +63,9 @@ jobs:
         run: |
           test "$(alembic heads | wc -l)" -eq 1
           alembic upgrade head
+
+      - name: Test deployment script transport
+        run: python -m unittest discover -s deploy -p "test_*.py"
 
       - name: Test backend
         working-directory: backend
@@ -119,6 +122,7 @@ jobs:
           docker build --target prod \
             --build-arg VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }} \
             --build-arg VITE_AZURE_CLIENT_ID=${{ vars.VITE_AZURE_CLIENT_ID }} \
+            --build-arg APP_GIT_SHA=${{ github.sha }} \
             -t "$REG/app-web:${{ github.sha }}" \
             -t "$REG/app-web:latest" \
             frontend
@@ -144,9 +148,31 @@ jobs:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          cat > remote-deploy.sh <<'SCRIPT'
-          set -euo pipefail
+          python3 - <<'BUILD_REMOTE_DEPLOY'
+          import os
+          from pathlib import Path
+
+          def heredoc(path, marker, content):
+              if marker in content:
+                  raise ValueError(f"{marker} marker appears in {path}")
+              return f"cat > {path} <<'{marker}'\n{content.rstrip()}\n{marker}\n"
+
+          deploy_files = "\n".join(
+              [
+                  heredoc("Caddyfile", "REMOTE_CADDYFILE", Path("deploy/Caddyfile").read_text()),
+                  heredoc(
+                      "docker-compose.prod.yml",
+                      "REMOTE_COMPOSE",
+                      Path("deploy/docker-compose.prod.yml").read_text(),
+                  ),
+                  heredoc("fetch-env.sh", "REMOTE_FETCH_ENV", Path("deploy/fetch-env.sh").read_text()),
+              ]
+          )
+
+          script = r'''set -euo pipefail
           cd /opt/app
+
+          __DEPLOY_FILES__
           chmod +x fetch-env.sh
 
           if ! command -v docker-credential-ecr-login >/dev/null 2>&1; then
@@ -181,27 +207,49 @@ jobs:
           sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=__GIT_SHA__/" .env
           docker compose -f docker-compose.prod.yml pull
 
-          docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
-          docker compose -f docker-compose.prod.yml up -d
+          # Keep Compose subprocesses detached from SSM command input.
+          docker compose -f docker-compose.prod.yml run --rm -T api alembic upgrade head </dev/null
+          docker compose -f docker-compose.prod.yml up -d --force-recreate api web caddy
+          docker compose -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile </dev/null
+
+          docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q api)" \
+            | grep -q ':__GIT_SHA__$'
+          docker inspect --format '{{.Config.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q web)" \
+            | grep -q ':__GIT_SHA__$'
+
+          DOMAIN="$(grep '^DOMAIN=' .env | cut -d= -f2)"
+          RESOLVE_ARG="${DOMAIN}:443:127.0.0.1"
 
           for i in $(seq 1 30); do
-            curl -fsS http://localhost/api/health && break
+            curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" && break
             sleep 2
             [ "$i" = "30" ] && { echo "smoke test failed"; exit 1; }
           done
 
+          for i in $(seq 1 30); do
+            SERVED_SHA="$(curl -fsS --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/deploy-sha" || true)"
+            [ "${SERVED_SHA}" = "__GIT_SHA__" ] && break
+            sleep 2
+            [ "$i" = "30" ] && {
+              echo "frontend deploy verification failed: expected __GIT_SHA__, got ${SERVED_SHA:-missing}"
+              exit 1
+            }
+          done
+
+          curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/dashboard" -o /dev/null \
+            | grep -qi '^Content-Security-Policy:'
+          curl -fsS -D - --resolve "${RESOLVE_ARG}" "https://${DOMAIN}/api/health" -o /dev/null \
+            | grep -qi '^Content-Security-Policy:'
+
           docker image prune -af --filter "until=72h"
-          SCRIPT
-          sed -i "s/__GIT_SHA__/${GIT_SHA}/g" remote-deploy.sh
+          '''
 
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
+          script = script.replace("__DEPLOY_FILES__", deploy_files)
+          script = script.replace("__GIT_SHA__", os.environ["GIT_SHA"])
+          Path("remote-deploy.sh").write_text(script)
+          BUILD_REMOTE_DEPLOY
 
-          script = Path("remote-deploy.sh").read_text()
-          command = "bash -s <<'REMOTE_DEPLOY_SCRIPT'\n" + script + "\nREMOTE_DEPLOY_SCRIPT"
-          Path("ssm-commands.json").write_text(json.dumps({"commands": [command]}))
-          PY
+          python3 deploy/build_ssm_command.py remote-deploy.sh ssm-commands.json
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name AWS-RunShellScript \

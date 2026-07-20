@@ -1,4 +1,4 @@
-{$DOMAIN} {
+:8080 {
 	encode gzip zstd
 
 	header {
@@ -15,6 +15,6 @@
 	}
 
 	handle {
-		reverse_proxy web:8080
+		reverse_proxy web:5173
 	}
 }

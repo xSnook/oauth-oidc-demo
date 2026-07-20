@@ -1,8 +1,20 @@
 name: oauth-oidc-demo
 
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:${CADDY_HOST_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}

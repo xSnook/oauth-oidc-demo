@@ -117,6 +117,9 @@ The remaining M7 work is still interactive because it depends on final human cho
 6. Add GitHub secrets/vars.
 7. Merge to `main` and watch the `ci-cd` workflow deploy.
 
+For an existing MySQL 8.0 RDS instance, use `mysql-84-upgrade.md` to snapshot and
+upgrade the database to MySQL 8.4 before RDS 8.0 standard support ends.
+
 ## GitHub Actions Values
 
 Secrets:

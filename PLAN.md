@@ -30,7 +30,7 @@ An internal web app with exactly these capabilities and nothing more:
 | Layer | Choice |
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, uvicorn, pydantic-settings, PyMySQL |
-| Database | MySQL 8.0 (Docker locally, RDS `db.t4g.micro` in prod), `utf8mb4` / `utf8mb4_0900_ai_ci` |
+| Database | MySQL 8.4 (Docker locally, RDS `db.t4g.micro` in prod), `utf8mb4` / `utf8mb4_0900_ai_ci` |
 | Frontend | React 18 + TypeScript + Vite, React Router v6, plain CSS (no UI framework in v1) |
 | Auth | Google Identity Services + MSAL.js in the browser → backend verifies ID tokens → app-issued session JWT in an HttpOnly cookie |
 | Local dev | docker-compose: `mysql`, `api` (port 8000), `web` (Vite, port 5173, proxies `/api`) |
@@ -656,7 +656,7 @@ name: app
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -903,7 +903,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.4
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: appdb
@@ -1079,7 +1079,7 @@ Region `us-east-1`. Default VPC + two added private subnets (no IGW route) for R
 |---|---|---|
 | SG (EC2) | `app-ec2-sg` | in: 80/443 from world; **no port-22 rule**; deploys and humans use SSM |
 | SG (RDS) | `app-rds-sg` | in: 3306 from `app-ec2-sg` (SG reference, not CIDR) |
-| RDS | `app-prod-mysql` | MySQL 8.0, `db.t4g.micro`, 20GB gp3, single-AZ, **Public access: No**, custom parameter group (`character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci`), backups 7d, deletion protection on |
+| RDS | `app-prod-mysql` | MySQL 8.4, `db.t4g.micro`, 20GB gp3, single-AZ, **Public access: No**, custom parameter group (`character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci`), backups 7d, deletion protection on |
 | ECR | `app-api`, `app-web` | scan on push; lifecycle: keep last 10 images |
 | IAM (EC2) | `app-ec2-role` | `AmazonEC2ContainerRegistryReadOnly`, `AmazonSSMManagedInstanceCore`, inline: `ssm:GetParameter*` on `/app/prod/*` + `kms:Decrypt` via `alias/aws/ssm` |
 | IAM (CI) | `app-github-deploy` | OIDC trust scoped to `repo:<org>/<repo>:ref:refs/heads/main` + `aud=sts.amazonaws.com`; ECR push on the two repos; `ec2:AuthorizeSecurityGroupIngress`/`RevokeSecurityGroupIngress` scoped to `app-ec2-sg` |
