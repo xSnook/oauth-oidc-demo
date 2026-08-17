@@ -95,7 +95,9 @@ jobs:
 
   build-push:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Production AWS infrastructure was retired. Set AWS_DEPLOY_ENABLED=true and
+    # restore the required secrets before intentionally re-enabling deployments.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -130,7 +132,7 @@ jobs:
 
   deploy:
     needs: build-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: production-deploy
